@@ -1,0 +1,17 @@
+/build/
+/dist/
+/out/
+/.vs/
+/CMakeUserPresets.json
+/docs/todos/
+
+# Source archives must never contain build products or proprietary runtimes.
+*.dll
+*.exe
+*.exp
+*.lib
+*.obj
+*.ofx
+*.pdb
+*.zip
+*.7z

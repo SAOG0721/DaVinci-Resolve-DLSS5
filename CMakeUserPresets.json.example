@@ -1,0 +1,21 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "local-vs2022-x64",
+      "inherits": "vs2022-x64",
+      "cacheVariables": {
+        "RESOLVE_OFX_SDK_ROOT": "C:/path/to/DaVinci Resolve/Support/Developer/OpenFX",
+        "DLSS_SDK_ROOT": "C:/path/to/DLSS",
+        "DLSSNR_RUNTIME_DLL": "C:/path/to/nvngx_dlssnr.dll"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "local-release",
+      "configurePreset": "local-vs2022-x64",
+      "configuration": "Release"
+    }
+  ]
+}

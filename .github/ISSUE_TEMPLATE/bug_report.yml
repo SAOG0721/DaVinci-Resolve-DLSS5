@@ -1,0 +1,45 @@
+name: Bug report
+description: Report a Resolve crash, load failure, wrong output, or runtime fallback
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search existing issues first. Attach the log file instead of pasting a long log.
+  - type: input
+    id: resolve
+    attributes:
+      label: DaVinci Resolve version
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU and NVIDIA driver
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual result
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log attachment
+      description: Attach %LOCALAPPDATA%\ResolveDlss5\ResolveDlss5.log here.
+  - type: checkboxes
+    id: runtime
+    attributes:
+      label: Runtime acknowledgement
+      options:
+        - label: I understand this is an unofficial experimental build using a community-modified runtime.
+          required: true
