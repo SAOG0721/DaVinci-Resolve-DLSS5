@@ -1215,12 +1215,16 @@ struct Feature18Runtime::Impl {
         if (sourceStride < static_cast<std::size_t>(width) * 4U * sizeof(float)) {
             return fail("Source row stride is smaller than float RGBA width");
         }
-        for (int y = 0; y < height; ++y) {
+        // OpenFX addresses rows from the bottom-left, while D3D textures use
+        // the top-left as their screen-space origin. Normalize that boundary
+        // here so NGX receives an upright texture (including its indicator).
+        for (int d3dY = 0; d3dY < height; ++d3dY) {
+            const int ofxY = height - 1 - d3dY;
             const auto* sourceRow = reinterpret_cast<const float*>(
                 reinterpret_cast<const std::byte*>(source) +
-                static_cast<std::ptrdiff_t>(y) * sourceRowBytes);
+                static_cast<std::ptrdiff_t>(ofxY) * sourceRowBytes);
             auto* destinationRow = mappedInput +
-                static_cast<std::size_t>(y) *
+                static_cast<std::size_t>(d3dY) *
                     inputFootprint.Footprint.RowPitch;
             for (int x = 0; x < width; ++x) {
                 for (int channel = 0; channel < 4; ++channel) {
@@ -1251,15 +1255,19 @@ struct Feature18Runtime::Impl {
         if (FAILED(result) || !mapped) {
             return failHr("Map Feature 18 output readback", result);
         }
-        for (int y = 0; y < height; ++y) {
+        // Convert the top-left D3D output back to OpenFX's bottom-left row
+        // order. Source and destination remain on the same logical OFX row
+        // for proxy decoding and alpha restoration.
+        for (int ofxY = 0; ofxY < height; ++ofxY) {
+            const int d3dY = height - 1 - ofxY;
             const auto* sourceRow = reinterpret_cast<const float*>(
                 reinterpret_cast<const std::byte*>(source) +
-                static_cast<std::ptrdiff_t>(y) * sourceRowBytes);
+                static_cast<std::ptrdiff_t>(ofxY) * sourceRowBytes);
             auto* destinationRow = reinterpret_cast<float*>(
                 reinterpret_cast<std::byte*>(destination) +
-                static_cast<std::ptrdiff_t>(y) * destinationRowBytes);
+                static_cast<std::ptrdiff_t>(ofxY) * destinationRowBytes);
             const auto* neuralRow = static_cast<const std::uint8_t*>(mapped) +
-                static_cast<std::size_t>(y) *
+                static_cast<std::size_t>(d3dY) *
                     outputFootprint.Footprint.RowPitch;
             for (int x = 0; x < width; ++x) {
                 for (int channel = 0; channel < 3; ++channel) {
