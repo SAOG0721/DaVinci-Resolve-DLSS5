@@ -1,5 +1,5 @@
 param(
-    [string]$Version = '0.3.0',
+    [string]$Version = '0.3.1',
     [string]$PackageName = 'Resolve-DLSS5-Experimental-x64',
     [string]$RuntimeDll = $env:DLSSNR_RUNTIME_DLL,
     [string]$DlssSdkRoot = $env:DLSS_SDK_ROOT,

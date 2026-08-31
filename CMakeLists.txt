@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(ResolveDlss5 VERSION 0.3.0 LANGUAGES CXX)
+project(ResolveDlss5 VERSION 0.3.1 LANGUAGES CXX)
 
 if(NOT WIN32)
     message(FATAL_ERROR "ResolveDlss5 currently supports Windows only")

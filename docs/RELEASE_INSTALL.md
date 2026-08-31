@@ -1,4 +1,4 @@
-# Resolve DLSS5 Experimental v0.3.0
+# Resolve DLSS5 Experimental v0.3.1
 
 This is an unofficial Windows x64 OpenFX build for personal, noncommercial,
 non-profit experimentation. It applies DLSS Neural Rendering at the input

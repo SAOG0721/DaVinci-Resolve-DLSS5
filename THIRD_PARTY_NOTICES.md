@@ -32,7 +32,7 @@ and is not part of the Git source tree or GitHub's automatically generated
 source archives. Users must independently ensure that their receipt and use of
 that runtime are authorized.
 
-For the v0.3.0 experimental binary package:
+For the v0.3.0 and v0.3.1 experimental binary packages:
 
 - File version: `310.8.0.0`
 - SHA-256: `984BEE0F775C277D5829B8FD6775D53A7B0F75396C852B3AAF06A18375F81014`
