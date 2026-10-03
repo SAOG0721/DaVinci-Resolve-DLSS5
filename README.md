@@ -8,11 +8,9 @@ DLSS Neural Rendering for DaVinci Resolve, with adjustable SDR/HDR detail, color
 
 Visit [GitHub Releases](https://github.com/SAOG0721/DaVinci-Resolve-DLSS5/releases).
 
-- Plugin: `ResolveDLSS5-0.4.0-win64.zip`
-- Source: `ResolveDLSS5-0.4.0-source.zip`
-- Each ZIP has a `.sha256.txt` checksum file.
+Download `ResolveDLSS5-0.4.0-win64.zip` for installation. For source, use the release page's **Source code (zip)** or **Source code (tar.gz)** downloads.
 
-The plugin ZIP contains the OFX bundle, installation/rollback scripts, instructions and licenses. Prepare the runtime described below before installation.
+The plugin ZIP contains the OFX bundle with the community DLSSNR runtime, installation/rollback scripts, instructions and licenses.
 
 ## Requirements
 
@@ -21,29 +19,25 @@ The plugin ZIP contains the OFX bundle, installation/rollback scripts, instructi
 | System | Windows x64 |
 | Resolve | Version target: 20.0.1 build 6 or later |
 | GPU | RTX 40 or RTX 50 series |
-| Runtime | An independently obtained, authorized `nvngx_dlssnr.dll` 310.8.0.0 with the checksum below |
+| Runtime | Bundled community-modified `nvngx_dlssnr.dll` 310.8.0.0, or another compatible Feature 18 runtime |
 
-Reference environment: Resolve Studio 20.0.1.6, RTX 5070 Ti, NVIDIA driver 616.92. GPU initialization also depends on the installed driver and the specified runtime.
-
-Runtime SHA-256:
-
-```text
-984BEE0F775C277D5829B8FD6775D53A7B0F75396C852B3AAF06A18375F81014
-```
+Reference environment: Resolve Studio 20.0.1.6, RTX 5070 Ti, NVIDIA driver 616.92. GPU initialization also depends on the installed driver and a compatible runtime.
 
 ## Install
 
-Extract the plugin ZIP and open PowerShell in its `0.4.0` directory. Preview the installation with your runtime path:
+Extract the plugin ZIP and open PowerShell in its `0.4.0` directory. Preview installation with the bundled runtime:
 
 ```powershell
-.\Install.ps1 -Validation -RuntimeDll 'C:\path\to\nvngx_dlssnr.dll'
+.\Install.ps1 -Validation
 ```
 
 Close Resolve, then run the command in administrator PowerShell with `-Apply`:
 
 ```powershell
-.\Install.ps1 -Validation -RuntimeDll 'C:\path\to\nvngx_dlssnr.dll' -Apply
+.\Install.ps1 -Validation -Apply
 ```
+
+To choose another compatible runtime, add `-RuntimeDll <path>` to the installation command.
 
 Installation target: `C:\Program Files\Common Files\OFX\Plugins\ResolveDlss5.ofx.bundle`. The script backs up the previous bundle and prints a `receipt.json` path. Keep that receipt, restart Resolve and add **DLSS Neural Video Experimental** from the effects library.
 

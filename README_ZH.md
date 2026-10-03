@@ -8,11 +8,9 @@
 
 访问 [GitHub Releases](https://github.com/SAOG0721/DaVinci-Resolve-DLSS5/releases)。
 
-- 插件包：`ResolveDLSS5-0.4.0-win64.zip`
-- 源码包：`ResolveDLSS5-0.4.0-source.zip`
-- 每份 ZIP 均有对应的 `.sha256.txt` 校验文件。
+安装请下载 `ResolveDLSS5-0.4.0-win64.zip`。源码使用发布页面自带的 **Source code (zip)** 或 **Source code (tar.gz)**。
 
-插件包包含 OFX bundle、安装/回退脚本、使用说明和许可文件。安装前请准备下列运行库。
+插件包包含 OFX bundle、社区 DLSSNR 运行库、安装/回退脚本、使用说明和许可文件。
 
 ## 运行条件
 
@@ -21,29 +19,25 @@
 | 系统 | Windows x64 |
 | Resolve | 版本目标：20.0.1 build 6 及以上 |
 | GPU | RTX 40 或 RTX 50 系 |
-| 运行库 | 自行取得且获授权的 `nvngx_dlssnr.dll` 310.8.0.0，匹配下列哈希 |
+| 运行库 | 随包提供社区修改版 `nvngx_dlssnr.dll` 310.8.0.0，也可选择其他兼容 Feature 18 的运行库 |
 
-参考环境：Resolve Studio 20.0.1.6、RTX 5070 Ti、NVIDIA 驱动 616.92。GPU 初始化还取决于所安装的驱动与指定运行库。
-
-运行库 SHA256：
-
-```text
-984BEE0F775C277D5829B8FD6775D53A7B0F75396C852B3AAF06A18375F81014
-```
+参考环境：Resolve Studio 20.0.1.6、RTX 5070 Ti、NVIDIA 驱动 616.92。GPU 初始化还取决于所安装的驱动与兼容运行库。
 
 ## 安装
 
-解压插件包，在其中的 `0.4.0` 目录打开 PowerShell，指定运行库路径进行预览：
+解压插件包，在其中的 `0.4.0` 目录打开 PowerShell，使用随包运行库预览安装：
 
 ```powershell
-.\Install.ps1 -Validation -RuntimeDll 'C:\path\to\nvngx_dlssnr.dll'
+.\Install.ps1 -Validation
 ```
 
 关闭 Resolve，在管理员 PowerShell 中增加 `-Apply` 执行安装：
 
 ```powershell
-.\Install.ps1 -Validation -RuntimeDll 'C:\path\to\nvngx_dlssnr.dll' -Apply
+.\Install.ps1 -Validation -Apply
 ```
+
+选择其他兼容运行库时，在安装命令中增加 `-RuntimeDll <路径>`。
 
 安装目标为 `C:\Program Files\Common Files\OFX\Plugins\ResolveDlss5.ofx.bundle`。脚本会备份原插件并输出 `receipt.json` 路径。保留收据，重启 Resolve，从效果库添加 **DLSS Neural Video Experimental**。
 

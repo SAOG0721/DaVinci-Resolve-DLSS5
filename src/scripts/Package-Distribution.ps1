@@ -1,5 +1,8 @@
 [CmdletBinding()]
-param([switch]$Validation)
+param(
+    [switch]$Validation,
+    [string]$RuntimeDll='C:\Program Files\Common Files\OFX\Plugins\ResolveDlss5.ofx.bundle\Contents\Win64\runtime\nvngx_dlssnr.dll'
+)
 $ErrorActionPreference='Stop'
 $projectRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $candidateRoot=Join-Path $projectRoot 'dist\0.4.0'
@@ -35,11 +38,15 @@ if($evidence.PluginSHA256 -ne $manifest.PluginSHA256 -or
 $zipName='ResolveDLSS5-0.4.0-win64.zip'
 $zipPath=Join-Path $projectRoot ('dist\'+$zipName)
 if(Test-Path -LiteralPath $zipPath){throw 'Distribution ZIP already exists; preserve it before repackaging'}
+if(!(Test-Path -LiteralPath $RuntimeDll -PathType Leaf)){throw 'Provide the authorized community runtime DLL to include in the binary package'}
 # Always use a fresh staging directory: candidate/debug documents stay outside the ZIP.
 $stageBase=Join-Path $projectRoot ('build\minimal-distribution-'+[guid]::NewGuid().ToString('N'))
 $packageRoot=Join-Path $stageBase '0.4.0'
 New-Item -ItemType Directory -Path $packageRoot | Out-Null
 Copy-Item -LiteralPath (Join-Path $candidateRoot $bundleName) -Destination $packageRoot -Recurse
+$runtimeDirectory=Join-Path $packageRoot ($bundleName+'\Contents\Win64\runtime')
+New-Item -ItemType Directory -Path $runtimeDirectory -Force | Out-Null
+Copy-Item -LiteralPath $RuntimeDll -Destination (Join-Path $runtimeDirectory 'nvngx_dlssnr.dll') -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\THIRD_PARTY_NOTICES.md') -Destination (Join-Path $packageRoot ($bundleName+'\Contents\THIRD_PARTY_NOTICES.md')) -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Install-Development.ps1') -Destination (Join-Path $packageRoot 'Install.ps1')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Restore-Development.ps1') -Destination (Join-Path $packageRoot 'Restore.ps1')
@@ -57,9 +64,9 @@ $summary=[ordered]@{
 $metadata=[ordered]@{
     InstallerFormat=1;Version=$manifest.Version;PackageRevision=$manifest.PackageRevision;
     ReleaseReady=$false;DeploymentAllowed=[bool]$manifest.DeploymentAllowed;
-    ValidationAllowed=[bool]$manifest.ValidationAllowed;RuntimeIncluded=$false;
+    ValidationAllowed=[bool]$manifest.ValidationAllowed;RuntimeIncluded=$true;
     PluginRelativePath=$pluginRelative;PluginSHA256=$manifest.PluginSHA256;
-    RequiredRuntimeSHA256=$manifest.RequiredRuntimeSHA256;TestsPassed=$expectedTests.Count;
+    TestsPassed=$expectedTests.Count;
     BlockedReason=$manifest.BlockedReason;ValidationSummary=$summary
 }
 $metadata | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $packageRoot ($bundleName+'\Contents\package.json')) -Encoding utf8
@@ -68,11 +75,15 @@ $expectedRoots=@('INSTALL.md','Install.ps1',$bundleName,'Restore.ps1') | Sort-Ob
 if(($roots -join '|') -ne ($expectedRoots -join '|')){throw 'Unexpected top-level package content'}
 $files=@(Get-ChildItem -LiteralPath $packageRoot -Recurse -File | Sort-Object FullName)
 $hashes=@($files | ForEach-Object {
-    if($_.Name -ne 'LICENSE' -and $_.Extension -notin @('.ofx','.md','.txt','.json','.ps1')){throw ('Unexpected delivery file: '+$_.Name)}
-    [ordered]@{Path=[IO.Path]::GetRelativePath($packageRoot,$_.FullName).Replace('\','/');
+    $relativePath=[IO.Path]::GetRelativePath($packageRoot,$_.FullName).Replace('\','/')
+    if($_.Extension -eq '.dll'){
+        if($relativePath -ne ($bundleName+'/Contents/Win64/runtime/nvngx_dlssnr.dll')){throw ('Unexpected DLL: '+$relativePath)}
+    }elseif($_.Name -ne 'LICENSE' -and $_.Extension -notin @('.ofx','.md','.txt','.json','.ps1')){throw ('Unexpected delivery file: '+$_.Name)}
+    [ordered]@{Path=$relativePath;
         SHA256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash;Bytes=$_.Length}
 })
 if(@($files | Where-Object {$_.Extension -eq '.ofx'}).Count -ne 1){throw 'The package must contain exactly one plugin'}
+if(@($files | Where-Object {$_.Extension -eq '.dll'}).Count -ne 1){throw 'The package must contain exactly one DLSSNR runtime DLL'}
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [IO.Compression.ZipFile]::CreateFromDirectory($packageRoot,$zipPath,[IO.Compression.CompressionLevel]::Optimal,$true)
 $archive=[IO.Compression.ZipFile]::OpenRead($zipPath)
@@ -91,7 +102,7 @@ $zipHash=(Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash
 "$zipHash  $zipName" | Set-Content -LiteralPath ($zipPath+'.sha256.txt') -Encoding utf8
 [ordered]@{
     Version=$manifest.Version;PackageRevision=$manifest.PackageRevision;Layout='Minimal';
-    ValidationOnly=[bool]$Validation;ReleaseReady=$false;RuntimeIncluded=$false;TestsPassed=$expectedTests.Count;
+    ValidationOnly=[bool]$Validation;ReleaseReady=$false;RuntimeIncluded=$true;TestsPassed=$expectedTests.Count;
     Archive=$zipName;ArchiveSHA256=$zipHash;ArchiveBytes=(Get-Item -LiteralPath $zipPath).Length;
     TopLevelEntries=$roots;PayloadCount=$hashes.Count;ZipContentVerified=$true;Payload=$hashes
 } | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath (Join-Path $projectRoot 'dist\distribution-audit.json') -Encoding utf8

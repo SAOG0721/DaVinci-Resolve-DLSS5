@@ -1,11 +1,13 @@
 # Changelog
 
-## [0.4.0] - 2026-10-03
+## [0.4.0] - 2026-10-04
 
 - Add SDR/HDR correction, detail, protection, compression and frequency controls.
 - Add 1–3 NR passes, AMDOF/NVOF and Fusion external motion input.
 - Improve playback/seeking, postprocessing efficiency and preview-size readback.
 - Shorten parameter/quality labels and use consistent pass names.
+- Include the community DLSSNR runtime from 0.3.1 and support choosing other compatible DLLs during installation.
+- Provide one installation ZIP; source downloads are available through the release page.
 - See [bilingual release notes](docs/RELEASE_NOTES_v0.4.0.md) for features and usage.
 
 ## 0.3.1-experimental - 2026-08-31

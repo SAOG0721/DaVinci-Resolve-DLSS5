@@ -20,10 +20,11 @@
 - 共享推理资源并复用最新帧 NR 结果，提升细节、保护与频率计算效率。
 - 修复部分预览尺寸的图像读回错误与参数面板加载问题。
 - 缩短过长的参数名称、质量选项与重置按钮，统一各 Pass 的名称。
+- 安装包附带与 0.3.1 相同的社区 DLSSNR 运行库；安装时可选择其他兼容 DLL。
 
 ### 使用
 
-Windows x64，Resolve 版本目标 20.0.1 build 6 及以上，GPU 面向 RTX 40/50。安装前准备匹配哈希的 `nvngx_dlssnr.dll` 310.8.0.0；安装步骤与参数用法见 README。
+Windows x64，Resolve 版本目标 20.0.1 build 6 及以上，GPU 面向 RTX 40/50。安装包包含社区修改版 `nvngx_dlssnr.dll` 310.8.0.0；安装步骤与参数用法见 README。
 
 从 1 Pass、默认细节开始，再根据素材调整。连续播放保留时序历史，跳转/倒放或活动 NR 参数变化会重置；冷启动的部分导出与完整顺序导出可能有画面差异。高分辨率、更多 Pass、进阶处理与更高光流质量会增加处理时间。
 
@@ -47,9 +48,10 @@ Windows x64，Resolve 版本目标 20.0.1 build 6 及以上，GPU 面向 RTX 40/
 - Share inference resources, reuse the latest NR output and improve detail/protection/frequency computation efficiency.
 - Fix image readback at some preview sizes and parameter-panel loading.
 - Shorten long parameter labels, quality options and the reset button; use consistent pass names.
+- Bundle the same community DLSSNR runtime as 0.3.1 and support choosing another compatible DLL during installation.
 
 ### Usage
 
-Windows x64, Resolve version target 20.0.1 build 6 or later, and RTX 40/50 GPUs. Prepare `nvngx_dlssnr.dll` 310.8.0.0 with the required checksum and follow README for installation and controls.
+Windows x64, Resolve version target 20.0.1 build 6 or later, and RTX 40/50 GPUs. The package includes the community-modified `nvngx_dlssnr.dll` 310.8.0.0. Follow README for installation and controls.
 
 Start with one pass/default detail. Sequential playback retains temporal history; seeking, reverse playback and active NR changes reset it, so cold partial exports can differ from full sequential exports. Higher resolution, additional passes, advanced processing and higher-quality flow increase processing time.

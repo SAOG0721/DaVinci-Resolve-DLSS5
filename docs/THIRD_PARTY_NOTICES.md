@@ -48,11 +48,12 @@ and is not part of the Git source tree or GitHub's automatically generated
 source archives. Users must independently ensure that their receipt and use of
 that runtime are authorized.
 
-The 0.4.0 validation package contains no community runtime.
-It requires an independently obtained, authorized local DLL with the tested
-version and SHA-256 listed below. The installer verifies this identity and does
-not download a runtime. The historical v0.3.x packaging does not grant new
-redistribution rights for this package.
+The 0.4.0 binary package includes the same community-modified runtime as
+v0.3.1-experimental, file version 310.8.0.0. The runtime retains its applicable
+NVIDIA terms and is separate from the MIT-licensed plugin source. Users may
+select another compatible, authorized DLSSNR runtime during installation.
+The installer records the selected file's checksum for copying and rollback.
+Runtime provenance is recorded in docs/runtime-dependencies.md.
 
 For the v0.3.0 and v0.3.1 experimental binary packages:
 

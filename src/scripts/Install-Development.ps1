@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$PackageRoot = '',
-    [string]$RuntimeDll = 'C:\Program Files\Common Files\OFX\Plugins\ResolveDlss5.ofx.bundle\Contents\Win64\runtime\nvngx_dlssnr.dll',
+    [string]$RuntimeDll = '',
     [switch]$Apply,
     [switch]$Validation
 )
@@ -24,10 +24,17 @@ if(!(Test-Path -LiteralPath $manifestPath)){
 }
 $manifest=Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
 $sourceBundle=Join-Path $PackageRoot 'ResolveDlss5.ofx.bundle'
+if(!$RuntimeDll){
+    $RuntimeDll=if($manifest.RuntimeIncluded){
+        Join-Path $sourceBundle 'Contents\Win64\runtime\nvngx_dlssnr.dll'
+    }else{Join-Path $targetRoot 'Contents\Win64\runtime\nvngx_dlssnr.dll'}
+}
 $sourcePlugin=Join-Path $sourceBundle 'Contents\Win64\ResolveDlss5.ofx'
 if((Get-FileHash -LiteralPath $sourcePlugin -Algorithm SHA256).Hash -ne $manifest.PluginSHA256){throw 'Candidate plugin hash mismatch'}
-if((Get-FileHash -LiteralPath $RuntimeDll -Algorithm SHA256).Hash -ne $manifest.RequiredRuntimeSHA256){throw 'Runtime hash mismatch'}
-if($manifest.Version -notin @('0.4.0','0.4.0-dev-s0') -or $manifest.RuntimeIncluded){throw 'Unsupported development manifest'}
+if(!(Test-Path -LiteralPath $RuntimeDll -PathType Leaf)){throw 'Runtime DLL file was not found'}
+# Use the selected runtime; its hash checks copying and the restore receipt only.
+$runtimeHash=(Get-FileHash -LiteralPath $RuntimeDll -Algorithm SHA256).Hash
+if($manifest.Version -notin @('0.4.0','0.4.0-dev-s0')){throw 'Unsupported development manifest'}
 $compactPackage=($manifest.InstallerFormat -eq 1)
 if($compactPackage){
     $summary=$manifest.ValidationSummary
@@ -48,7 +55,7 @@ if($compactPackage){
 }
 if(!$Apply){
     [ordered]@{Mode='PreviewOnly';Version=$manifest.Version;Target=$targetRoot;BackupRoot=$backupRoot;
-        PluginSHA256=$manifest.PluginSHA256;RuntimeSource=$RuntimeDll;RuntimeSHA256=$manifest.RequiredRuntimeSHA256;
+        PluginSHA256=$manifest.PluginSHA256;RuntimeSource=$RuntimeDll;RuntimeSHA256=$runtimeHash;
         DeploymentAllowed=($manifest.DeploymentAllowed -eq $true);BlockedReason=$manifest.BlockedReason;
         ValidationOnly=[bool]$Validation;ValidationAllowed=($manifest.ValidationAllowed -eq $true);
         ResolveRunning=[bool](Get-Process Resolve -ErrorAction SilentlyContinue);WritesPerformed=$false} | ConvertTo-Json
@@ -87,7 +94,7 @@ $stageRuntime=Join-Path $stage 'Contents\Win64\runtime'
 New-Item -ItemType Directory -Path $stageRuntime -Force | Out-Null
 Copy-Item -LiteralPath $RuntimeDll -Destination (Join-Path $stageRuntime 'nvngx_dlssnr.dll')
 if((Get-FileHash -LiteralPath (Join-Path $stage 'Contents\Win64\ResolveDlss5.ofx') -Algorithm SHA256).Hash -ne $manifest.PluginSHA256){throw 'Staged plugin verification failed'}
-if((Get-FileHash -LiteralPath (Join-Path $stageRuntime 'nvngx_dlssnr.dll') -Algorithm SHA256).Hash -ne $manifest.RequiredRuntimeSHA256){throw 'Staged runtime verification failed'}
+if((Get-FileHash -LiteralPath (Join-Path $stageRuntime 'nvngx_dlssnr.dll') -Algorithm SHA256).Hash -ne $runtimeHash){throw 'Staged runtime verification failed'}
 $hadOriginal=Test-Path -LiteralPath $targetRoot
 $originalMoved=$false
 $installedMoved=$false
@@ -96,9 +103,9 @@ try {
     Move-Item -LiteralPath $stage -Destination $targetRoot
     $installedMoved=$true
     if((Get-FileHash -LiteralPath (Join-Path $targetRoot 'Contents\Win64\ResolveDlss5.ofx') -Algorithm SHA256).Hash -ne $manifest.PluginSHA256){throw 'Installed plugin verification failed'}
-    if((Get-FileHash -LiteralPath (Join-Path $targetRoot 'Contents\Win64\runtime\nvngx_dlssnr.dll') -Algorithm SHA256).Hash -ne $manifest.RequiredRuntimeSHA256){throw 'Installed runtime verification failed'}
+    if((Get-FileHash -LiteralPath (Join-Path $targetRoot 'Contents\Win64\runtime\nvngx_dlssnr.dll') -Algorithm SHA256).Hash -ne $runtimeHash){throw 'Installed runtime verification failed'}
     [ordered]@{Version=$manifest.Version;Target=$targetRoot;Backup=$backup;HadOriginal=$hadOriginal;
-        PluginSHA256=$manifest.PluginSHA256;RuntimeSHA256=$manifest.RequiredRuntimeSHA256;
+        PluginSHA256=$manifest.PluginSHA256;RuntimeSHA256=$runtimeHash;
         InstalledAt=(Get-Date).ToString('o');ValidationOnly=[bool]$Validation} | ConvertTo-Json | Set-Content -LiteralPath $receipt -Encoding utf8
 } catch {
     if($installedMoved -and (Test-Path -LiteralPath $targetRoot)){Move-Item -LiteralPath $targetRoot -Destination (Join-Path $transactionRoot 'failed-install.bundle')}

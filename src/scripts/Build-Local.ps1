@@ -31,8 +31,6 @@ if(!$FidelityFxSdkRoot -or !$NvOfSdkRoot -or !$DxcPath){
 }
 if(!(Test-Path -LiteralPath $RuntimeDll -PathType Leaf)){throw 'Provide the locally authorized runtime DLL for real NGX tests'}
 $runtimeHash=(Get-FileHash -LiteralPath $RuntimeDll -Algorithm SHA256).Hash
-$expectedRuntime='984BEE0F775C277D5829B8FD6775D53A7B0F75396C852B3AAF06A18375F81014'
-if($runtimeHash -ne $expectedRuntime){throw 'Runtime identity differs from the tested 310.8.0.0 DLL'}
 $configureArgs=@('-S',$sourceRoot,'-B',$buildRoot,'-G','Visual Studio 17 2022','-A','x64',
     '-DRESOLVE_DLSS5_BUILD_SMOKE_TEST=ON',"-DDLSS_SDK_ROOT=$DlssSdkRoot", "-DRESOLVE_OFX_SDK_ROOT=$ResolveSdkRoot",
     "-DFIDELITYFX_SDK_ROOT=$FidelityFxSdkRoot", "-DNVOF_SDK_ROOT=$NvOfSdkRoot", "-DDXC_PATH=$DxcPath", "-DDLSSNR_RUNTIME_DLL=$RuntimeDll")
@@ -69,7 +67,7 @@ $pluginHash=(Get-FileHash -LiteralPath (Join-Path $binaryRoot 'ResolveDlss5.ofx'
     ValidationAllowed=$true;
     BlockedReason='Streaming rework requires isolated Resolve render acceptance before normal installation or distribution.';
     PluginRelativePath='Contents\Win64\ResolveDlss5.ofx'; PluginSHA256=$pluginHash;
-    RequiredRuntimeSHA256=$runtimeHash; RuntimeIncluded=$false;
+    TestedRuntimeSHA256=$runtimeHash; RuntimeIncluded=$false;
     SourceBaseline='a659e5c674388ea8026f4cf8df9f206826d12452';
     Scope='0.4.0 with r5 rendering and compact panel labels/choice names; parameter IDs, defaults and numeric behavior preserved';
     Pending='Manual Resolve host/export acceptance, sequential preparation cache, antiflicker, inference scaling, suffix cache, CUDA bridge, fault recovery and 40-series/higher-host validation'

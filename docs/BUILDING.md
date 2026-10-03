@@ -1,6 +1,6 @@
 # Building / 构建
 
-The source uses `src/`, `tests/` and `docs/`. No SDK, runtime, generated shader, build output or test media is vendored. Visual Studio 2022 C++ x64, CMake 3.25+, CUDA Toolkit 12, Resolve OpenFX SDK, NGX/DLSS SDK, NVIDIA Optical Flow SDK, FidelityFX SDK **v2.3.0**, and DXC are required. The build helper discovers Visual Studio using `vswhere` when CMake is absent from PATH.
+The source uses `src/`, `tests/` and `docs/`. SDKs, runtime binaries, generated shaders, build output and test media stay outside the Git source tree. Visual Studio 2022 C++ x64, CMake 3.25+, CUDA Toolkit 12, Resolve OpenFX SDK, NGX/DLSS SDK, NVIDIA Optical Flow SDK, FidelityFX SDK **v2.3.0**, and DXC are required. The build helper discovers Visual Studio using `vswhere` when CMake is absent from PATH.
 
 在本机准备外部依赖，设置路径或使用同名 CMake cache 变量。`FIDELITYFX_SDK_ROOT` 指包含 `Kits/FidelityFX` 的 v2.3.0 根目录；`NVOF_SDK_ROOT` 指直接包含 `nvOpticalFlowCuda.h` 的目录。社区 DLL 仅用于获授权的本机 GPU 测试，不提交或加入分发。
 
@@ -27,9 +27,9 @@ From the repository root:
     -RuntimeDll $env:DLSSNR_RUNTIME_DLL
 ```
 
-This configures `src/` into `build/`, builds Release and runs five CTest groups. It never installs. The runtime hash must match the version documented in README. CPU and real GPU results are separate from Resolve host acceptance.
+This configures `src/` into `build/`, builds Release and runs five CTest groups. It never installs. The selected runtime is used for real NGX tests and its identity is recorded. CPU and real GPU results are separate from Resolve host acceptance.
 
-添加 `-Package` 在五组测试通过后准备二进制候选、许可与 manifest。`src/scripts/Package-Distribution.ps1 -Validation` 校验匹配二进制的测试/参数证据，并从干净的暂存目录生成精简 ZIP：插件 bundle、Install.ps1、Restore.ps1 与 INSTALL.md。安装器摘要置于 bundle 的 Contents/package.json，详细报告保留在维护记录。打包使用 PowerShell 7；安装/回退支持 PowerShell 5.1 与 7。
+添加 `-Package` 在五组测试通过后准备二进制候选、许可与 manifest。`src/scripts/Package-Distribution.ps1 -Validation -RuntimeDll $env:DLSSNR_RUNTIME_DLL` 校验匹配二进制的测试/参数证据，并从干净的暂存目录生成精简 ZIP：插件 bundle、Install.ps1、Restore.ps1 与 INSTALL.md。安装器摘要置于 bundle 的 Contents/package.json，详细报告保留在维护记录。打包使用 PowerShell 7；安装/回退支持 PowerShell 5.1 与 7。
 
 ## CMake presets
 
@@ -52,3 +52,5 @@ Presets use `build/vs2022-x64`, separate from the script's `build/`. Do not mix 
 ```
 
 It reports synthetic CPU cases and, with `--gpu`, the real NGX path including transfers/waits. These numbers are not host playback FPS or image-quality acceptance. See [test scope](../tests/README.md).
+
+The binary ZIP includes the supplied authorized community DLSSNR runtime in the private bundle runtime directory. Source ZIPs retain source files only. Installer metadata carries no runtime hash allowlist.

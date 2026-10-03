@@ -1,12 +1,20 @@
 # Runtime dependencies
 
-0.4.0 requires an independently obtained, authorized community `nvngx_dlssnr.dll`
-310.8.0.0. It is not included in the binary ZIP, Git tree or source ZIP.
+The 0.4.0 binary package includes community-modified `nvngx_dlssnr.dll`
+310.8.0.0, the same runtime published in
+[v0.3.1-experimental](https://github.com/SAOG0721/DaVinci-Resolve-DLSS5/releases/tag/v0.3.1-experimental).
 
-SHA-256: `984BEE0F775C277D5829B8FD6775D53A7B0F75396C852B3AAF06A18375F81014`.
+Provenance: reused from the existing local plugin installation and verified
+against the referenced release on 2026-10-04. The bundled runtime has the same
+file bytes as that release's documented community DLL. Its applicable NVIDIA
+terms and separate community-modified status are recorded in
+[third-party notices](../THIRD_PARTY_NOTICES.md); the binary bundle includes
+NVIDIA-RTX-SDK-LICENSE.txt. The plugin source uses the repository's MIT license.
 
-The installer does not download a DLL and rejects a different hash. Historical
-0.3.x assets do not establish new redistribution rights. See
-[installation](RELEASE_INSTALL.md), [README](../README.md) and
-[notices](../THIRD_PARTY_NOTICES.md). NVOF loads the installed driver API from
-System32; no display-driver DLL is copied by this project.
+Installation uses the bundled runtime by default. `-RuntimeDll <path>` selects
+another compatible, authorized Feature 18 runtime. The selected file's checksum
+is recorded for file-copy and rollback integrity. Real NGX tests use the runtime
+selected for the build and report its identity.
+
+See [installation](RELEASE_INSTALL.md) and [README](../README.md). NVOF uses the
+installed NVIDIA driver's API from System32.

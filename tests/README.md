@@ -1,6 +1,6 @@
 # Test scope / 验证范围
 
-Reference environment: Windows x64, Resolve Studio 20.0.1.6, Ryzen 9 9950X3D, RTX 5070 Ti, NVIDIA 616.92, Visual Studio 2022, CUDA 12.3. Runtime 310.8.0.0 is checked by SHA-256.
+Reference environment: Windows x64, Resolve Studio 20.0.1.6, Ryzen 9 9950X3D, RTX 5070 Ti, NVIDIA 616.92, Visual Studio 2022, CUDA 12.3. Reference runtime: community-modified 310.8.0.0.
 
 | Group | Validated boundary |
 | --- | --- |
@@ -43,6 +43,19 @@ The final 0.4.0 package changes UI label, option and hint strings only. Source t
 
 ## Minimal distribution
 
-The binary ZIP exposes the plugin bundle, Install.ps1, Restore.ps1 and INSTALL.md. Compact installer metadata inside Contents/package.json preserves binary/runtime hashes, validation gates and passed-test summaries; full reports remain in the source/maintainer records. Package-only changes preserve the installed plugin binary.
+The binary ZIP exposes the plugin bundle, Install.ps1, Restore.ps1 and INSTALL.md. Compact installer metadata inside Contents/package.json preserves plugin hashes, validation gates and passed-test summaries; full reports remain in the source/maintainer records. Package-only changes preserve the installed plugin binary.
 
 PowerShell 5.1 and 7 compact-package checks pass: installation/rollback previews, failed/missing/duplicate-test rejection, wrong binary evidence and invalid report-hash rejection. Installed binary/runtime and backup count remain unchanged.
+
+## Bundled runtime selection
+
+The package includes the reference community runtime from v0.3.1-experimental.
+Build and installation accept the selected compatible DLL independently of its
+checksum. Hashes record test identity, copying and restore receipts. The package
+metadata carries no RequiredRuntimeSHA256 field.
+
+PowerShell 5.1 and 7 package verification checks bundled-runtime selection by
+default, an explicitly selected DLL with a different hash, ignored legacy
+runtime pins, missing-runtime rejection and the existing validation-summary
+checks. These are installer previews; the alternative test file is not loaded
+or used for an NR render.
