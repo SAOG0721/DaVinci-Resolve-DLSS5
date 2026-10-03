@@ -29,7 +29,7 @@ From the repository root:
 
 This configures `src/` into `build/`, builds Release and runs five CTest groups. It never installs. The runtime hash must match the version documented in README. CPU and real GPU results are separate from Resolve host acceptance.
 
-添加 `-Package` 可在五组测试通过后准备 `dist/0.4.0/` 二进制候选、许可与 manifest，**不能单靠此步骤生成可验收的发布包**：README、手测清单和同二进制的真实宿主参数报告仍须准备。`Package-Distribution.ps1 -Validation` 需要匹配的本机宿主证据，否则拒绝。普通安装/打包门禁仍保留；不得以编译成功代替宿主验收。
+添加 `-Package` 在五组测试通过后准备二进制候选、许可与 manifest。`src/scripts/Package-Distribution.ps1 -Validation` 校验匹配二进制的测试/参数证据，并从干净的暂存目录生成精简 ZIP：插件 bundle、Install.ps1、Restore.ps1 与 INSTALL.md。安装器摘要置于 bundle 的 Contents/package.json，详细报告保留在维护记录。打包使用 PowerShell 7；安装/回退支持 PowerShell 5.1 与 7。
 
 ## CMake presets
 

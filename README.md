@@ -36,13 +36,13 @@ Runtime SHA-256:
 Extract the plugin ZIP and open PowerShell in its `0.4.0` directory. Preview the installation with your runtime path:
 
 ```powershell
-.\Install-Development.ps1 -Validation -RuntimeDll 'C:\path\to\nvngx_dlssnr.dll'
+.\Install.ps1 -Validation -RuntimeDll 'C:\path\to\nvngx_dlssnr.dll'
 ```
 
 Close Resolve, then run the command in administrator PowerShell with `-Apply`:
 
 ```powershell
-.\Install-Development.ps1 -Validation -RuntimeDll 'C:\path\to\nvngx_dlssnr.dll' -Apply
+.\Install.ps1 -Validation -RuntimeDll 'C:\path\to\nvngx_dlssnr.dll' -Apply
 ```
 
 Installation target: `C:\Program Files\Common Files\OFX\Plugins\ResolveDlss5.ofx.bundle`. The script backs up the previous bundle and prints a `receipt.json` path. Keep that receipt, restart Resolve and add **DLSS Neural Video Experimental** from the effects library.
@@ -50,7 +50,7 @@ Installation target: `C:\Program Files\Common Files\OFX\Plugins\ResolveDlss5.ofx
 To restore the previous plugin, close Resolve and preview with the receipt from your installation:
 
 ```powershell
-.\Restore-Development.ps1 -Receipt 'C:\path\to\receipt.json'
+.\Restore.ps1 -Receipt 'C:\path\to\receipt.json'
 ```
 
 Add `-Apply` in administrator PowerShell after checking the preview. See [installation details](docs/RELEASE_INSTALL.md).

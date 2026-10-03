@@ -48,7 +48,7 @@ and is not part of the Git source tree or GitHub's automatically generated
 source archives. Users must independently ensure that their receipt and use of
 that runtime are authorized.
 
-The 0.4.0 revision 5 validation package contains no community runtime.
+The 0.4.0 validation package contains no community runtime.
 It requires an independently obtained, authorized local DLL with the tested
 version and SHA-256 listed below. The installer verifies this identity and does
 not download a runtime. The historical v0.3.x packaging does not grant new

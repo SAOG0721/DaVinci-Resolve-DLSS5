@@ -1,29 +1,44 @@
-# Installation / 安装与回退
+# Resolve DLSS5 0.4.0 安装 / Installation
 
-Version 0.4.0 is an experimental validation build. The public package name does not remove its validation gates or establish full 0.4 acceptance. Do not copy the source ZIP into the OFX directory.
+解压后包含 `ResolveDlss5.ofx.bundle`、`Install.ps1`、`Restore.ps1` 和本说明。
 
-1. Download/extract `ResolveDLSS5-0.4.0-win64.zip` and compare its SHA-256 with the adjacent `.sha256.txt` file using `Get-FileHash`.
-2. Obtain your authorized local `nvngx_dlssnr.dll` 310.8.0.0. Its SHA-256 must be `984BEE0F775C277D5829B8FD6775D53A7B0F75396C852B3AAF06A18375F81014`. The ZIP and installer contain no runtime download.
-3. In the extracted `0.4.0` directory, preview:
+## 安装
 
-```powershell
-.\Install-Development.ps1 -Validation -RuntimeDll 'C:\path\to\nvngx_dlssnr.dll'
-```
+1. 准备获授权的 `nvngx_dlssnr.dll` 310.8.0.0，SHA256：
 
-4. 关闭 Resolve，在管理员 PowerShell 中使用相同命令增加 `-Apply`。目标固定为 `C:\Program Files\Common Files\OFX\Plugins\ResolveDlss5.ofx.bundle`。安装前保存工程；脚本不操作 Resolve 数据库、缓存或应用目录。
-5. 保留输出的 `receipt.json` 路径，重启 Resolve，在测试工程检查效果。正常不带 `-Validation` 的安装仍被阻止。
-
-The installer checks the plugin hash and reports both the runtime identity and permitted target. It preserves the prior bundle under `%LOCALAPPDATA%\ResolveDlss5\Backups`. Failed replacements attempt to restore it. Inspect the preview before applying.
-
-## Rollback / 回退
-
-Close Resolve and use the receipt from this installation:
+   `984BEE0F775C277D5829B8FD6775D53A7B0F75396C852B3AAF06A18375F81014`
+2. 关闭 DaVinci Resolve，在解压后的 `0.4.0` 目录打开管理员 PowerShell。
+3. 指定运行库路径进行预览：
 
 ```powershell
-.\Restore-Development.ps1 -Receipt 'C:\path\to\receipt.json'
-# To restore after reviewing, run in administrator PowerShell with -Apply.
+.\Install.ps1 -Validation -RuntimeDll 'C:\path\to\nvngx_dlssnr.dll'
 ```
 
-Restore checks the current plugin/runtime hashes, permitted backup path and target before replacing the bundle. It preserves the replaced version. A receipt for another installed binary cannot be used interchangeably. Do not edit receipts or bypass hash guards to force a rollback.
+4. 检查预览后增加 `-Apply` 安装：
 
-The original float/net-correction and HDR changes may alter 0.3.x appearances. Compare on a copy before using existing projects. See [manual checks](../tests/MANUAL-ACCEPTANCE.md) in the source tree, or `MANUAL-ACCEPTANCE.md` in the binary ZIP.
+```powershell
+.\Install.ps1 -Validation -RuntimeDll 'C:\path\to\nvngx_dlssnr.dll' -Apply
+```
+
+已有运行库位于原插件的 `Contents\Win64\runtime` 时，可省略 `-RuntimeDll`。
+
+安装目录为 `C:\Program Files\Common Files\OFX\Plugins\ResolveDlss5.ofx.bundle`。脚本备份原插件并输出 `receipt.json` 路径，请保留收据。重启 Resolve，从效果库添加 **DLSS Neural Video Experimental**。
+
+## 回退
+
+关闭 Resolve，在管理员 PowerShell 中使用本次安装收据预览，检查后增加 `-Apply`：
+
+```powershell
+.\Restore.ps1 -Receipt 'C:\path\to\receipt.json'
+.\Restore.ps1 -Receipt 'C:\path\to\receipt.json' -Apply
+```
+
+## English
+
+Extract the ZIP, prepare your authorized `nvngx_dlssnr.dll` 310.8.0.0 with the SHA-256 above, and close Resolve. Open administrator PowerShell in the extracted `0.4.0` directory.
+
+Preview with `Install.ps1 -Validation -RuntimeDll <path>`, then add `-Apply` to install. If the runtime is already in the previous plugin's `Contents\Win64\runtime` folder, omit `-RuntimeDll`.
+
+The installer backs up the previous bundle and prints a `receipt.json` path. Keep the receipt and restart Resolve. To restore, close Resolve and preview with `Restore.ps1 -Receipt <receipt>`, then add `-Apply` in administrator PowerShell.
+
+功能与参数用法 / Features and controls: [GitHub README](https://github.com/SAOG0721/DaVinci-Resolve-DLSS5).

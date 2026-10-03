@@ -31,7 +31,7 @@ At 4K, r5 CPU stages are approximately 77.14 / 286.44 / 458.50 ms and the warm N
 
 Follow [BUILDING.md](../docs/BUILDING.md). The build script runs all five CTest groups. Preset builds use `ctest --preset release`. Run the separate performance probe only when needed; it is not in CTest or binary packages. `src/scripts/Verify-ResolveParameters.py` and other host scripts require a deliberately prepared test session and the official Resolve Scripting API; inspect their preconditions before running them.
 
-Public source archives omit machine logs, host projects, SDKs, private runtimes and generated outputs. The binary archive carries its original successful contract report and native parameter report with matching hashes; a fresh build can produce a different binary hash and requires its own host evidence.
+Public source archives omit machine logs, host projects, SDKs, private runtimes and generated outputs. The compact binary archive carries an installer summary linked to the successful contract report and parameter proof by SHA-256; detailed evidence stays outside the binary ZIP; a fresh build can produce a different binary hash and requires its own host evidence.
 
 ## 0.4.0 preparation checks / 本次交付检查
 
@@ -40,3 +40,9 @@ Public source archives omit machine logs, host projects, SDKs, private runtimes 
 ## Compact-label update
 
 The final 0.4.0 package changes UI label, option and hint strings only. Source token/ID comparison confirms the parameter IDs, defaults, ranges, choice ordering and computation are preserved. Compiled-binary string checks cover the new labels. Native r5 parameter round trips are historical evidence; the newly labeled binary has no new native parameter/panel/render/export acceptance. The current Resolve session remains open and is not modified by package preparation.
+
+## Minimal distribution
+
+The binary ZIP exposes the plugin bundle, Install.ps1, Restore.ps1 and INSTALL.md. Compact installer metadata inside Contents/package.json preserves binary/runtime hashes, validation gates and passed-test summaries; full reports remain in the source/maintainer records. Package-only changes preserve the installed plugin binary.
+
+PowerShell 5.1 and 7 compact-package checks pass: installation/rollback previews, failed/missing/duplicate-test rejection, wrong binary evidence and invalid report-hash rejection. Installed binary/runtime and backup count remain unchanged.

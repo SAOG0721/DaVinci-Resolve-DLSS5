@@ -36,13 +36,13 @@
 解压插件包，在其中的 `0.4.0` 目录打开 PowerShell，指定运行库路径进行预览：
 
 ```powershell
-.\Install-Development.ps1 -Validation -RuntimeDll 'C:\path\to\nvngx_dlssnr.dll'
+.\Install.ps1 -Validation -RuntimeDll 'C:\path\to\nvngx_dlssnr.dll'
 ```
 
 关闭 Resolve，在管理员 PowerShell 中增加 `-Apply` 执行安装：
 
 ```powershell
-.\Install-Development.ps1 -Validation -RuntimeDll 'C:\path\to\nvngx_dlssnr.dll' -Apply
+.\Install.ps1 -Validation -RuntimeDll 'C:\path\to\nvngx_dlssnr.dll' -Apply
 ```
 
 安装目标为 `C:\Program Files\Common Files\OFX\Plugins\ResolveDlss5.ofx.bundle`。脚本会备份原插件并输出 `receipt.json` 路径。保留收据，重启 Resolve，从效果库添加 **DLSS Neural Video Experimental**。
@@ -50,7 +50,7 @@
 恢复原插件时，关闭 Resolve，使用本次安装的收据预览：
 
 ```powershell
-.\Restore-Development.ps1 -Receipt 'C:\path\to\receipt.json'
+.\Restore.ps1 -Receipt 'C:\path\to\receipt.json'
 ```
 
 检查预览后，在管理员 PowerShell 增加 `-Apply`。详见[安装说明](docs/RELEASE_INSTALL.md)。

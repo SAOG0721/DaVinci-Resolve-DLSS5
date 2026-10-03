@@ -6,10 +6,11 @@ param(
     [switch]$Validation
 )
 $ErrorActionPreference='Stop'
-# Portable ZIPs place this script beside manifest.json; source-tree use keeps
-# the existing default candidate path. Neither mode writes without -Apply.
+# Portable packages keep installer metadata inside the bundle. Source-tree
+# candidates retain manifest.json. Neither mode writes without -Apply.
 if(!$PackageRoot){
-    $PackageRoot=if(Test-Path -LiteralPath (Join-Path $PSScriptRoot 'manifest.json')){
+    $PackageRoot=if((Test-Path -LiteralPath (Join-Path $PSScriptRoot 'manifest.json')) -or
+        (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'ResolveDlss5.ofx.bundle\Contents\package.json'))){
         $PSScriptRoot
     }else{[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\dist\0.4.0'))}
 }
@@ -17,12 +18,34 @@ $PackageRoot=[IO.Path]::GetFullPath($PackageRoot)
 $targetRoot='C:\Program Files\Common Files\OFX\Plugins\ResolveDlss5.ofx.bundle'
 $backupRoot=Join-Path $env:LOCALAPPDATA 'ResolveDlss5\Backups'
 if([IO.Path]::GetPathRoot([IO.Path]::GetFullPath($backupRoot)) -ne [IO.Path]::GetPathRoot($targetRoot)){throw 'Atomic bundle replacement requires a backup directory on the target volume'}
-$manifest=Get-Content -LiteralPath (Join-Path $PackageRoot 'manifest.json') -Raw | ConvertFrom-Json
+$manifestPath=Join-Path $PackageRoot 'manifest.json'
+if(!(Test-Path -LiteralPath $manifestPath)){
+    $manifestPath=Join-Path $PackageRoot 'ResolveDlss5.ofx.bundle\Contents\package.json'
+}
+$manifest=Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
 $sourceBundle=Join-Path $PackageRoot 'ResolveDlss5.ofx.bundle'
 $sourcePlugin=Join-Path $sourceBundle 'Contents\Win64\ResolveDlss5.ofx'
 if((Get-FileHash -LiteralPath $sourcePlugin -Algorithm SHA256).Hash -ne $manifest.PluginSHA256){throw 'Candidate plugin hash mismatch'}
 if((Get-FileHash -LiteralPath $RuntimeDll -Algorithm SHA256).Hash -ne $manifest.RequiredRuntimeSHA256){throw 'Runtime hash mismatch'}
 if($manifest.Version -notin @('0.4.0','0.4.0-dev-s0') -or $manifest.RuntimeIncluded){throw 'Unsupported development manifest'}
+$compactPackage=($manifest.InstallerFormat -eq 1)
+if($compactPackage){
+    $summary=$manifest.ValidationSummary
+    $requiredTests=@('ResolveDlss5.Feature18RuntimeSmoke','ResolveDlss5.Core',
+        'ResolveDlss5.TimelineRuntimeSmoke','ResolveDlss5.GpuContracts')
+    if([int]$manifest.PackageRevision -ge 4){$requiredTests+='ResolveDlss5.OpticalFlow'}
+    if(!$summary -or $summary.PluginSHA256 -ne $manifest.PluginSHA256 -or
+        $summary.ContractReportSHA256 -notmatch '^[A-Fa-f0-9]{64}$' -or
+        [int]$manifest.TestsPassed -ne $requiredTests.Count -or
+        @($summary.Tests).Count -ne $requiredTests.Count){
+        throw 'Invalid compact validation summary'
+    }
+    foreach($name in $requiredTests){
+        if(@($summary.Tests | Where-Object {$_.Name -eq $name -and $_.Passed -eq $true}).Count -ne 1){
+            throw ('Compact package requires a passed test: '+$name)
+        }
+    }
+}
 if(!$Apply){
     [ordered]@{Mode='PreviewOnly';Version=$manifest.Version;Target=$targetRoot;BackupRoot=$backupRoot;
         PluginSHA256=$manifest.PluginSHA256;RuntimeSource=$RuntimeDll;RuntimeSHA256=$manifest.RequiredRuntimeSHA256;
@@ -34,7 +57,7 @@ if(!$Apply){
 if($manifest.DeploymentAllowed -ne $true -and !($Validation -and $manifest.ValidationAllowed -eq $true)){
     throw ('Candidate deployment is blocked: '+$manifest.BlockedReason)
 }
-if($Validation){
+if($Validation -and !$compactPackage){
     $portableEvidence=Join-Path $PackageRoot 'validation-evidence.json'
     if(Test-Path -LiteralPath $portableEvidence){
         $evidence=Get-Content -LiteralPath $portableEvidence -Raw | ConvertFrom-Json
