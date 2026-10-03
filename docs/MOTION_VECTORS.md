@@ -12,7 +12,7 @@ Internal methods are None, AMDOF and NVOF. None supplies zero motion and still r
 
 Unsupported grid/preset combinations report an error. They do not silently change quality. Internal estimation fetches at most the current and previous valid source frames; the first source frame uses zero motion. Every NR pass consumes the same motion.
 
-Fusion 中开启 **Use External Motion (Skip Estimation)** 后读取 **MotionVectors**，内部方法/质量隐藏并保留设置。关闭开关后恢复内部设置。外部数据必须满足：
+Fusion 中开启 **External Motion** 后读取 **MotionVectors**，内部方法/质量隐藏并保留设置。关闭开关后恢复内部设置。外部数据必须满足：
 
 - 与 Source 相同尺寸、bounds 和像素宽高比的 **float RGBA** 图。
 - **当前帧到前一帧**，默认 R=X、G=Y、源像素单位，向右/向下为正。

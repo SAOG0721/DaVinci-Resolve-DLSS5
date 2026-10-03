@@ -63,15 +63,15 @@ Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\THIRD_PARTY_NOTICES.md') -D
 'This software contains source code provided by NVIDIA Corporation.' | Set-Content -LiteralPath (Join-Path $noticeRoot 'NVIDIA-NOTICE.txt') -Encoding utf8
 $pluginHash=(Get-FileHash -LiteralPath (Join-Path $binaryRoot 'ResolveDlss5.ofx') -Algorithm SHA256).Hash
 [ordered]@{
-    Version='0.4.0'; PackageRevision=5; ReleaseReady=$false; TestsPassed=5;
-    EvidenceSubdirectory='performance-r5';
+    Version='0.4.0'; PackageRevision=6; ReleaseReady=$false; TestsPassed=5;
+    EvidenceSubdirectory='release-040-labels';
     DeploymentAllowed=$false;
     ValidationAllowed=$true;
     BlockedReason='Streaming rework requires isolated Resolve render acceptance before normal installation or distribution.';
     PluginRelativePath='Contents\Win64\ResolveDlss5.ofx'; PluginSHA256=$pluginHash;
     RequiredRuntimeSHA256=$runtimeHash; RuntimeIncluded=$false;
     SourceBaseline='a659e5c674388ea8026f4cf8df9f206826d12452';
-    Scope='r4 optical flow plus bounded parallel CPU color/codec, neutral composite fusion, zero-motion bulk clear, padded readback fix and stage timing';
+    Scope='0.4.0 with r5 rendering and compact panel labels/choice names; parameter IDs, defaults and numeric behavior preserved';
     Pending='Manual Resolve host/export acceptance, sequential preparation cache, antiflicker, inference scaling, suffix cache, CUDA bridge, fault recovery and 40-series/higher-host validation'
 } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $deliveryRoot 'manifest.json') -Encoding utf8
 Write-Output "Development candidate prepared at $deliveryRoot; installation was not performed."

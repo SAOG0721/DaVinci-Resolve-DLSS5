@@ -659,27 +659,27 @@ void describeDetailControls(OFX::ImageEffectDescriptor& descriptor,
     };
     for (const auto& c : {Control{"nrResidualStrength", "Overall Strength", 1, 2},
                           {"nrResidualChroma", "Chroma Strength", 1, 2},
-                          {"nrResidualLightness", "Overall Lightness Strength", 1, 2},
-                          {"nrDarkening", "Shadow / Structure Strength", 1, 2},
-                          {"nrBrightening", "Highlight / Glow Strength", 1, 2}})
+                          {"nrResidualLightness", "Lightness", 1, 2},
+                          {"nrDarkening", "Shadow/Structure", 1, 2},
+                          {"nrBrightening", "Highlight/Glow", 1, 2}})
         add(c, detail);
     auto* advancedToggle =
-        defineBoolean(descriptor, kParamAdvanced, "Advanced Adjustments",
+        defineBoolean(descriptor, kParamAdvanced, "Advanced",
                       "Shows protection, compression and frequency controls; changes display only.",
                       false, detail);
     advancedToggle->setAnimates(false);
     page.addChild(*advancedToggle);
     auto* advanced = descriptor.defineGroupParam("nrAdvanced");
-    advanced->setLabels("Advanced Adjustments", "Advanced Adjustments", "Advanced Adjustments");
+    advanced->setLabels("Advanced", "Advanced", "Advanced");
     advanced->setOpen(true);
     advanced->setIsSecret(true);
     page.addChild(*advanced);
     for (const auto& c : {Control{"nrHueProtection", "Hue Protection", 0, 1},
                           {"nrDarkProtection", "Shadow Protection", 0, 1},
-                          {"nrHighlightProtection", "Highlight Protection", 0, 1},
-                          {"nrCompression", "Overcorrection Suppression", 0, 1},
-                          {"nrLowFrequency", "Low-frequency Range Strength", 1, 2},
-                          {"nrHighFrequency", "High-frequency Range Strength", 1, 2}})
+                          {"nrHighlightProtection", "Highlight Protect", 0, 1},
+                          {"nrCompression", "Soft Compression", 0, 1},
+                          {"nrLowFrequency", "Low Frequency", 1, 2},
+                          {"nrHighFrequency", "High Frequency", 1, 2}})
         add(c, advanced)->setIsSecret(true);
 }
 
@@ -793,12 +793,12 @@ void ResolveDlss5PluginFactory::describeInContext(OFX::ImageEffectDescriptor& de
     motion->setTemporalClipAccess(false);
 
     auto* page = descriptor.definePageParam("Controls");
-    page->addChild(*defineBoolean(descriptor, kParamEnabled, "Enable DLSS Neural Rendering",
+    page->addChild(*defineBoolean(descriptor, kParamEnabled, "Enable NR",
                                   "Enables the experimental same-resolution Feature 18 pass.",
                                   true));
     describeDetailControls(descriptor, *page);
     auto* strengths = descriptor.defineGroupParam("nrStrengths");
-    strengths->setLabels("DLSSNR - Pass 1", "DLSSNR - Pass 1", "DLSSNR - Pass 1");
+    strengths->setLabels("NR Pass 1", "NR Pass 1", "NR Pass 1");
     strengths->setHint("Original neural pass controls; existing IDs and defaults are preserved.");
     strengths->setOpen(true);
     page->addChild(*strengths);
@@ -817,14 +817,14 @@ void ResolveDlss5PluginFactory::describeInContext(OFX::ImageEffectDescriptor& de
                                  {"Style 0", "Style 1", "Style 2"}, strengths));
     page->addChild(*defineDouble(descriptor, kParamIntensity, "Intensity",
                                  "Overall neural strength.", 1.0, 0.0, 2.0, 0.01, strengths));
-    page->addChild(*defineDouble(descriptor, kParamLocalTone, "Local Tone Strength",
+    page->addChild(*defineDouble(descriptor, kParamLocalTone, "Local Tone",
                                  "Local tone contribution.", 1.0, 0.0, 2.0, 0.01, strengths));
-    page->addChild(*defineDouble(descriptor, kParamLocalStructure, "Local Structure Strength",
+    page->addChild(*defineDouble(descriptor, kParamLocalStructure, "Local Structure",
                                  "Local detail and structure contribution.", 1.0, 0.0, 2.0, 0.01,
                                  strengths));
-    page->addChild(*defineDouble(descriptor, kParamSkinStructure, "Skin Structure Strength",
+    page->addChild(*defineDouble(descriptor, kParamSkinStructure, "Skin Structure",
                                  "Skin structure contribution.", 1.0, 0.0, 2.0, 0.01, strengths));
-    page->addChild(*defineBoolean(descriptor, kParamAutoMask, "Use Automatic Mask",
+    page->addChild(*defineBoolean(descriptor, kParamAutoMask, "Auto Mask",
                                   "Enables DLSSNR.UseAutoMask.", false, strengths));
 
     for (int index = 2; index <= 3; ++index) {
@@ -853,7 +853,7 @@ void ResolveDlss5PluginFactory::describeInContext(OFX::ImageEffectDescriptor& de
             descriptor, (prefix + "Skin").c_str(), "Skin Structure",
             "New passes default to zero; original Pass 1 retains its original default", 0, 0, 2,
             .01, group));
-        page->addChild(*defineBoolean(descriptor, (prefix + "Mask").c_str(), "Automatic Mask",
+        page->addChild(*defineBoolean(descriptor, (prefix + "Mask").c_str(), "Auto Mask",
                                       "Independent pass mask", false, group));
     }
     auto* codec = descriptor.defineGroupParam("nrCodec");
@@ -863,11 +863,11 @@ void ResolveDlss5PluginFactory::describeInContext(OFX::ImageEffectDescriptor& de
     page->addChild(*codec);
     page->addChild(*defineChoice(
         descriptor, kParamInputEncoding, "Input Encoding",
-        "Select the actual node input. Automatic preserves the legacy sRGB interpretation; it does "
+        "Select the actual node input. Index 0 preserves the legacy sRGB interpretation; it does "
         "not detect project color management.",
         0,
-        {"sRGB (compatible default)", "SDR / sRGB", "Linear / Rec.709 HDR", "HDR / Rec.2020 PQ",
-         "SDR / Rec.709 gamma 2.4", "HDR / Rec.2020 HLG", "Linear / Rec.2020 HDR"},
+        {"sRGB (default)", "sRGB", "Linear Rec.709", "Rec.2020 PQ",
+         "Rec.709 2.4", "Rec.2020 HLG", "Linear Rec.2020"},
         codec));
     auto* hdr = descriptor.defineGroupParam("nrHdrControls");
     hdr->setLabels("HDR Reference", "HDR Reference", "HDR Reference");
@@ -875,19 +875,19 @@ void ResolveDlss5PluginFactory::describeInContext(OFX::ImageEffectDescriptor& de
     hdr->setIsSecret(true);
     hdr->setParent(*codec);
     page->addChild(*hdr);
-    page->addChild(*defineDouble(descriptor, kParamPaperWhite, "Scene Paper-White Scale",
+    page->addChild(*defineDouble(descriptor, kParamPaperWhite, "White Scale",
                                  "Paper-white normalization used by the HDR proxy codec.", 1.0, 0.1,
                                  8.0, 0.01, hdr));
     page->addChild(
-        *defineDouble(descriptor, kParamHdrTransfer, "HDR Transfer Strength",
+        *defineDouble(descriptor, kParamHdrTransfer, "HDR Strength",
                       "Blends the neural proxy change back into the original HDR signal.", 1.0, 0.0,
                       1.0, 0.01, hdr));
 
-    page->addChild(*defineDouble(descriptor, "nrReferenceWhite", "Reference White (nits)",
+    page->addChild(*defineDouble(descriptor, "nrReferenceWhite", "White (nits)",
                                  "HDR reference white; linear HDR 1.0 represents this luminance.",
                                  203, 1, 1000, 1, hdr));
     page->addChild(*defineDouble(
-        descriptor, "nrPeakNits", "Reference Peak (nits)",
+        descriptor, "nrPeakNits", "Peak (nits)",
         "Fixed HDR proxy normalization and HLG reference display peak. Must be >= reference white.",
         1000, 100, 10000, 1, hdr));
     for (const char* id : {kParamPaperWhite, kParamHdrTransfer, "nrReferenceWhite", "nrPeakNits"})
@@ -917,11 +917,11 @@ void ResolveDlss5PluginFactory::describeInContext(OFX::ImageEffectDescriptor& de
     flow->setOpen(true);
     page->addChild(*flow);
     page->addChild(
-        *defineBoolean(descriptor, "nrExternalMotion", "Use External Motion (Skip Estimation)",
-                       "Read current-to-previous float vectors from MotionVectors input. "
+        *defineBoolean(descriptor, "nrExternalMotion", "External Motion",
+                       "Skip internal estimation and read current-to-previous float vectors from MotionVectors. "
                        "Invalid/missing input reports an error. All NR passes share one field.",
                        false, flow));
-    page->addChild(*defineChoice(descriptor, "nrOpticalFlowMethod", "Optical Flow Method",
+    page->addChild(*defineChoice(descriptor, "nrOpticalFlowMethod", "Flow Method",
                                  "Estimate only the current/previous source pair, once for all NR "
                                  "passes. No whole-clip replay.",
                                  2, {"None", "AMDOF", "NVOF"}, flow));
@@ -931,31 +931,31 @@ void ResolveDlss5PluginFactory::describeInContext(OFX::ImageEffectDescriptor& de
         {"Performance", "Quality"}, flow));
     page->addChild(*defineChoice(descriptor, "nrNvidiaFlowQuality", "NVOF Quality",
                                  "Magpie profiles: 4/FAST, 4/MEDIUM, 4/SLOW, 2/MEDIUM, 2/SLOW. "
-                                 "Unsupported profiles report an error.",
+                                 "High/Highest Quality cost more. Unsupported profiles report an error.",
                                  2,
-                                 {"Performance", "Balanced", "Quality", "High Quality (High Cost)",
-                                  "Highest Quality (Very High Cost)"},
+                                 {"Performance", "Balanced", "Quality", "High Quality",
+                                  "Highest Quality"},
                                  flow));
     page->addChild(
-        *defineChoice(descriptor, "nrExternalXChannel", "External X Channel",
+        *defineChoice(descriptor, "nrExternalXChannel", "X Channel",
                       "Horizontal vector channel. Float data bypasses neural color encoding.", 0,
                       {"R", "G", "B", "A"}, flow));
-    page->addChild(*defineChoice(descriptor, "nrExternalYChannel", "External Y Channel",
+    page->addChild(*defineChoice(descriptor, "nrExternalYChannel", "Y Channel",
                                  "Vertical vector channel. Must differ from X.", 1,
                                  {"R", "G", "B", "A"}, flow));
     page->addChild(
-        *defineChoice(descriptor, "nrExternalUnits", "External Vector Units",
+        *defineChoice(descriptor, "nrExternalUnits", "Vector Units",
                       "Normalized units multiply X by width and Y by height. Current-to-previous "
                       "direction is required; invert forward fields upstream, not by negation.",
                       0, {"Pixels", "Normalized UV"}, flow));
     page->addChild(*defineBoolean(
-        descriptor, "nrExternalYUp", "External Positive Y Is Up",
+        descriptor, "nrExternalYUp", "Positive Y Up",
         "Convert upward-positive vectors to the internal downward-positive convention.", false,
         flow));
-    page->addChild(*defineDouble(descriptor, "nrExternalScaleX", "External X Scale",
+    page->addChild(*defineDouble(descriptor, "nrExternalScaleX", "X Scale",
                                  "Additional horizontal conversion scale.", 1, -100, 100, .01,
                                  flow));
-    page->addChild(*defineDouble(descriptor, "nrExternalScaleY", "External Y Scale",
+    page->addChild(*defineDouble(descriptor, "nrExternalScaleY", "Y Scale",
                                  "Additional vertical conversion scale.", 1, -100, 100, .01, flow));
 
     auto* diagnostics = descriptor.defineGroupParam("nrDiagnostics");
@@ -972,11 +972,11 @@ void ResolveDlss5PluginFactory::describeInContext(OFX::ImageEffectDescriptor& de
         *defineChoice(descriptor, kParamOutputView, "Output View",
                       "Processed shows the normal result; Difference x10 magnifies the "
                       "signed RGB delta; Left / Right draws an original/processed split.",
-                      0, {"Processed", "Difference x10", "Left / Right Compare"}, diagnostics));
+                      0, {"Processed", "Difference x10", "Split View"}, diagnostics));
 
     auto* reset = descriptor.definePushButtonParam(kParamReset);
-    reset->setLabels("Reset NR Feature and Clear History", "Reset NR Feature and Clear History",
-                     "Reset NR Feature and Clear History");
+    reset->setLabels("Reset NR", "Reset NR",
+                     "Reset NR");
     reset->setHint("Forces a Feature 18 history reset on the next render.");
     page->addChild(*reset);
     resolve_dlss5::writeDiagnosticLog("OFX parameter context description completed");

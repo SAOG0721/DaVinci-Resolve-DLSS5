@@ -12,7 +12,7 @@ Reference environment: Windows x64, Resolve Studio 20.0.1.6, Ryzen 9 9950X3D, RT
 
 Test images are generated in memory. No external footage is distributed. These are contract tests and do not establish visual quality, host FPS, export equivalence or fault-stress acceptance.
 
-Resolve 的参数 API 检查：63 个控件/动作（含隐藏旧 ID）、9 组、隐藏值保留、旧设置往返、光流设置与 MotionVectors 连接。物理 Inspector、真实运动像素读取及时间线 NR 导出尚待[手测](MANUAL-ACCEPTANCE.md)。r5 headless Fusion 未调度 OFX Render，未输出帧；不能沿用较早版本的一次预览证明。
+历史 r5 二进制的 Resolve 参数 API 检查：63 个控件/动作（含隐藏旧 ID）、9 组、隐藏值保留、旧设置往返、光流设置与 MotionVectors 连接。物理 Inspector、真实运动像素读取及时间线 NR 导出尚待[手测](MANUAL-ACCEPTANCE.md)。r5 headless Fusion 未调度 OFX Render，未输出帧；不能沿用较早版本的一次预览证明。
 
 ## Synthetic performance / 合成性能
 
@@ -36,3 +36,7 @@ Public source archives omit machine logs, host projects, SDKs, private runtimes 
 ## 0.4.0 preparation checks / 本次交付检查
 
 2026-10-03: the maintained build and a clean, separate source checkout both pass all five test groups (12.55 s and 12.74 s respectively). The public source checkout was built with the documented root CMake presets and external dependency variables. PowerShell 7.6.5 and 5.1 installation/rollback previews pass for the extracted 0.4.0 ZIP, with no changes to installed plugin/runtime hashes or backup count. This preparation did not run or close the user's Resolve session and did not add native render/export acceptance.
+
+## Compact-label update
+
+The final 0.4.0 package changes UI label, option and hint strings only. Source token/ID comparison confirms the parameter IDs, defaults, ranges, choice ordering and computation are preserved. Compiled-binary string checks cover the new labels. Native r5 parameter round trips are historical evidence; the newly labeled binary has no new native parameter/panel/render/export acceptance. The current Resolve session remains open and is not modified by package preparation.

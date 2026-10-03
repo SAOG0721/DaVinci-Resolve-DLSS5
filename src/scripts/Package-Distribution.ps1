@@ -42,6 +42,8 @@ if($Validation){
         ContractReportSHA256=(Get-FileHash -LiteralPath $reportPath).Hash;
         ParameterReportSHA256=$hostEvidence.ParameterReportSHA256;
         NativeParameterRoundTripPassed=$hostEvidence.NativeParameterRoundTripPassed;
+        ParameterProofKind=$hostEvidence.ParameterProofKind;
+        CompactLabelsSourceAndBinaryChecked=$hostEvidence.CompactLabelsSourceAndBinaryChecked;
         NativePreviewRenderObserved=$hostEvidence.NativePreviewRenderObserved;
         NativeTimelineNRExportAccepted=$hostEvidence.NativeTimelineNRExportAccepted;
         Pending='Manual timeline/export acceptance; sequential preparation cache and full 0.4 features remain incomplete'} |
