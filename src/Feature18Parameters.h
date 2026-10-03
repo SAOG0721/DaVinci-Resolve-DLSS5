@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 
 namespace resolve_dlss5 {
@@ -30,6 +31,34 @@ enum class InputEncoding : int {
     SdrSrgb = 1,
     LinearScRgb = 2,
     Pq = 3,
+    SdrRec709 = 4,
+    Hlg = 5,
+    LinearRec2020 = 6,
+};
+
+struct DetailSettings {
+    float strength = 1;
+    float lightness = 1;
+    float chroma = 1;
+    float darkening = 1;
+    float brightening = 1;
+    float hueProtection = 0;
+    float darkProtection = 0;
+    float highlightProtection = 0;
+    float compression = 0;
+    float lowFrequency = 1;
+    float highFrequency = 1;
+    bool operator==(const DetailSettings&) const = default;
+};
+
+struct NrPassSettings {
+    NrPreset preset = NrPreset::Preset1;
+    bool uiCorrection = false;
+    int style = 0;
+    float intensity = 1, localToneStrength = 1, localStructureStrength = 1,
+          skinStructureStrength = 0;
+    bool useAutoMask = false;
+    bool operator==(const NrPassSettings&) const = default;
 };
 
 struct Feature18Settings {
@@ -47,6 +76,12 @@ struct Feature18Settings {
     InputEncoding inputEncoding = InputEncoding::Automatic;
     float paperWhiteScale = 1.0F;
     float hdrTransferStrength = 1.0F;
+    float referenceWhiteNits = 203.0F;
+    float peakNits = 1000.0F;
+    bool premultiplied = false;
+    DetailSettings detail;
+    int passCount = 1;
+    std::array<NrPassSettings, 2> additionalPasses{};
 
     GuidanceMode guidanceMode = GuidanceMode::ForceZero;
     DepthConvention depthConvention = DepthConvention::UseInputFlag;

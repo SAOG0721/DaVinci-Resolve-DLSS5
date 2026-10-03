@@ -15,3 +15,10 @@
 *.pdb
 *.zip
 *.7z
+
+/tests/results/
+__pycache__/
+*.pyc
+*.exr
+*.mp4
+*.mov

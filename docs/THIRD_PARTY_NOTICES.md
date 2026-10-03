@@ -4,7 +4,7 @@ Resolve DLSS5 Experimental is distributed under the MIT License.
 
 The source build helper `src/scripts/Generate-FidelityFXOpticalFlowShaders.ps1`
 is adapted from the local SAOG0721/Magpie tree and retains GPL-3.0-only;
-see [GPL text](docs/licenses/Magpie-Build-Helper-GPL-3.0.txt). This helper is not
+see [GPL text](licenses/Magpie-Build-Helper-GPL-3.0.txt). This helper is not
 included in the binary distribution. Its generated shader programs are AMD
 FidelityFX SDK material under AMD's MIT terms, not the helper's license.
 
@@ -24,13 +24,13 @@ The source repository does not vendor the following dependencies:
 
 The plugin binary incorporates the OFX Support Library under its BSD-3-Clause
 terms. Its required notice is included at
-[`licenses/OFX-Support-Library-BSD-3-Clause.txt`](docs/licenses/OFX-Support-Library-BSD-3-Clause.txt)
+[`licenses/OFX-Support-Library-BSD-3-Clause.txt`](licenses/OFX-Support-Library-BSD-3-Clause.txt)
 and is copied into every binary package.
 
 Optical flow incorporates AMD FidelityFX SDK v2.3.0 optical-flow/backend code
-and generated DXIL under [AMD MIT terms](docs/licenses/AMD-FidelityFX-MIT.txt).
+and generated DXIL under [AMD MIT terms](licenses/AMD-FidelityFX-MIT.txt).
 The NVIDIA Optical Flow CUDA API headers use
-[BSD-3-Clause terms](docs/licenses/NVIDIA-OpticalFlow-BSD-3-Clause.txt).
+[BSD-3-Clause terms](licenses/NVIDIA-OpticalFlow-BSD-3-Clause.txt).
 Both notices are included in binary packages. Driver `nvofapi64.dll` is loaded
 from Windows System32 and is never copied or redistributed by this project.
 The shader helper and SDKs were read from the user's existing local Magpie

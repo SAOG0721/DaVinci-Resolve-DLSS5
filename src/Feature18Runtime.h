@@ -2,10 +2,10 @@
 
 #pragma once
 
-#include "Feature18Parameters.h"
-
 #include <memory>
 #include <string>
+
+#include "Feature18Parameters.h"
 
 namespace resolve_dlss5 {
 
@@ -13,30 +13,32 @@ namespace resolve_dlss5 {
 // %LOCALAPPDATA%\ResolveDlss5\ResolveDlss5.log and OutputDebugString.
 void writeDiagnosticLog(const std::string& message) noexcept;
 
+struct RuntimeTimings {
+    double lockMs = 0, initializeMs = 0, prepareMs = 0;
+    // Wall time includes submission, transfers, queueing, inference and fence
+    // waiting. It is not a measurement of pure GPU inference time.
+    double submitWaitMs = 0, readbackMs = 0, totalMs = 0;
+};
+
 // CPU-facing prototype backend. Resolve supplies float RGBA frames; this
 // class owns the verified Magpie-style D3D12 Feature 18 session internally.
 class Feature18Runtime final {
-public:
+   public:
     Feature18Runtime();
     ~Feature18Runtime();
 
     Feature18Runtime(const Feature18Runtime&) = delete;
     Feature18Runtime& operator=(const Feature18Runtime&) = delete;
 
-    bool process(
-        const float* source,
-        int sourceRowBytes,
-        float* destination,
-        int destinationRowBytes,
-        int width,
-        int height,
-        const Feature18Settings& settings,
-        bool resetHistory);
+    bool process(const float* source, int sourceRowBytes, float* destination,
+                 int destinationRowBytes, int width, int height, const Feature18Settings& settings,
+                 bool resetHistory, bool returnNeuralProxy = false,
+                 const float* motionTopLeft = nullptr, RuntimeTimings* timings = nullptr);
 
     [[nodiscard]] const std::string& lastError() const noexcept;
     void reset();
 
-private:
+   private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

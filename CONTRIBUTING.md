@@ -1,20 +1,7 @@
 # Contributing
 
-Please search existing Issues and Discussions before opening a report. For a
-runtime failure, attach `%LOCALAPPDATA%\ResolveDlss5\ResolveDlss5.log` and
-include the Resolve version, GPU, NVIDIA driver, input format, and reproduction
-steps.
+Use the documented Windows x64 build and run the five contract test groups with an authorized runtime where required. Keep CPU, real GPU, parameter API and native host results separate. Preserve explicit input-encoding and current-to-previous motion contracts, original float/alpha behavior, bounded temporal dependencies, cache signatures and fence-governed lifetimes.
 
-Code contributions should:
+Report Resolve/GPU/driver/runtime versions, source encoding and dimensions, pass count, optical-flow source/quality, timestamps and reproduction steps. Remove private paths or project details before sharing logs. Do not commit runtimes, SDKs, driver binaries, media, caches, personal CMake presets or generated outputs.
 
-- target Windows x64 and compile with the documented Visual Studio/CMake preset;
-- pass `ResolveDlss5.Feature18RuntimeSmoke` where an authorized runtime is available;
-- preserve source-frame fallback on every initialization or evaluation failure;
-- avoid committing DLL, SDK, library, build, or release artifacts;
-- keep local SDK and runtime paths in environment variables or
-  `CMakeUserPresets.json` only; and
-- use focused, git-style commit subjects such as `fix: serialize NGX reset`.
-
-By submitting code, you agree to license your contribution under the MIT
-License. Do not submit NVIDIA SDK code or any binary whose redistribution
-rights you cannot document.
+Project contributions are MIT unless the file has an explicit separate license. Preserve the GPL-3.0-only shader helper and all dependency notices. Do not submit third-party code or binaries without documented rights. See [BUILDING.md](docs/BUILDING.md), [tests](tests/README.md) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

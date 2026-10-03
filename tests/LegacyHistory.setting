@@ -1,0 +1,10 @@
+{
+    Tools = ordered() {
+        DLSSNeuralVideoExperimental1 = ofx.com.saog.resolve.dlss5 {
+            Inputs = {
+                nrHistoryStartMode = Input { Value = 1, },
+                nrHistoryStartFrame = Input { Value = 12, },
+            },
+        },
+    },
+}

@@ -18,5 +18,15 @@
       "configurePreset": "vs2022-x64",
       "configuration": "Release"
     }
+  ],
+  "testPresets": [
+    {
+      "name": "release",
+      "configurePreset": "vs2022-x64",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
   ]
 }

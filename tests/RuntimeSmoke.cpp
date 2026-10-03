@@ -1,23 +1,21 @@
 // SPDX-License-Identifier: MIT
 
-#include "Feature18Runtime.h"
-
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <iostream>
 #include <vector>
 
+#include "Feature18Runtime.h"
+
 int main() {
     constexpr int width = 640;
     constexpr int height = 360;
-    std::vector<float> source(
-        static_cast<std::size_t>(width) * height * 4U);
+    std::vector<float> source(static_cast<std::size_t>(width) * height * 4U);
     std::vector<float> destination(source.size(), 0.0F);
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
-            const std::size_t offset =
-                (static_cast<std::size_t>(y) * width + x) * 4U;
+            const std::size_t offset = (static_cast<std::size_t>(y) * width + x) * 4U;
             source[offset + 0] = static_cast<float>(x) / (width - 1);
             source[offset + 1] = static_cast<float>(y) / (height - 1);
             source[offset + 2] = ((x / 16 + y / 16) & 1) ? 0.8F : 0.2F;
@@ -32,17 +30,17 @@ int main() {
 
     resolve_dlss5::Feature18Runtime runtime;
     const int rowBytes = width * 4 * static_cast<int>(sizeof(float));
-    if (!runtime.process(
-            source.data(),
-            rowBytes,
-            destination.data(),
-            rowBytes,
-            width,
-            height,
-            settings,
-            true)) {
-        std::cerr << "Feature 18 smoke test failed: "
-                  << runtime.lastError() << '\n';
+    auto invalid = settings;
+    invalid.peakNits = 100;
+    if (runtime.process(source.data(), rowBytes, destination.data(), rowBytes, width, height,
+                        invalid, true) ||
+        runtime.lastError().empty()) {
+        std::cerr << "Invalid white/peak contract must fail with a useful error\n";
+        return 1;
+    }
+    if (!runtime.process(source.data(), rowBytes, destination.data(), rowBytes, width, height,
+                         settings, true)) {
+        std::cerr << "Feature 18 smoke test failed: " << runtime.lastError() << '\n';
         return 1;
     }
 
@@ -51,53 +49,27 @@ int main() {
     // and that the first session remains valid while the second exists.
     std::vector<float> secondDestination(source.size(), 0.0F);
     resolve_dlss5::Feature18Runtime secondRuntime;
-    if (!secondRuntime.process(
-            source.data(),
-            rowBytes,
-            secondDestination.data(),
-            rowBytes,
-            width,
-            height,
-            settings,
-            true)) {
-        std::cerr << "Feature 18 second-runtime test failed: "
-                  << secondRuntime.lastError() << '\n';
+    if (!secondRuntime.process(source.data(), rowBytes, secondDestination.data(), rowBytes, width,
+                               height, settings, true)) {
+        std::cerr << "Feature 18 second-runtime test failed: " << secondRuntime.lastError() << '\n';
         return 1;
     }
-    if (!runtime.process(
-            source.data(),
-            rowBytes,
-            destination.data(),
-            rowBytes,
-            width,
-            height,
-            settings,
-            false)) {
-        std::cerr << "Feature 18 shared-hook reuse test failed: "
-                  << runtime.lastError() << '\n';
+    if (!runtime.process(source.data(), rowBytes, destination.data(), rowBytes, width, height,
+                         settings, false)) {
+        std::cerr << "Feature 18 shared-hook reuse test failed: " << runtime.lastError() << '\n';
         return 1;
     }
 
     // Exercise a second temporal evaluation without resetting Feature 18.
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
-            const std::size_t offset =
-                (static_cast<std::size_t>(y) * width + x) * 4U;
-            source[offset + 2] =
-                (((x + 3) / 16 + y / 16) & 1) ? 0.8F : 0.2F;
+            const std::size_t offset = (static_cast<std::size_t>(y) * width + x) * 4U;
+            source[offset + 2] = (((x + 3) / 16 + y / 16) & 1) ? 0.8F : 0.2F;
         }
     }
-    if (!runtime.process(
-            source.data(),
-            rowBytes,
-            destination.data(),
-            rowBytes,
-            width,
-            height,
-            settings,
-            false)) {
-        std::cerr << "Feature 18 second-frame test failed: "
-                  << runtime.lastError() << '\n';
+    if (!runtime.process(source.data(), rowBytes, destination.data(), rowBytes, width, height,
+                         settings, false)) {
+        std::cerr << "Feature 18 second-frame test failed: " << runtime.lastError() << '\n';
         return 1;
     }
 
@@ -113,14 +85,11 @@ int main() {
             }
             minimum = std::min(minimum, value);
             maximum = std::max(maximum, value);
-            absoluteDifference += std::abs(
-                static_cast<double>(value - source[index + channel]));
+            absoluteDifference += std::abs(static_cast<double>(value - source[index + channel]));
         }
     }
-    absoluteDifference /=
-        static_cast<double>(width) * height * 3.0;
-    std::cout << "Feature 18 smoke test passed; mean_abs_diff="
-              << absoluteDifference << " range=[" << minimum << ", "
-              << maximum << "]\n";
+    absoluteDifference /= static_cast<double>(width) * height * 3.0;
+    std::cout << "Feature 18 smoke test passed; mean_abs_diff=" << absoluteDifference << " range=["
+              << minimum << ", " << maximum << "]\n";
     return 0;
 }

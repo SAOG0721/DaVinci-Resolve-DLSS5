@@ -7,6 +7,10 @@
       "cacheVariables": {
         "RESOLVE_OFX_SDK_ROOT": "C:/path/to/DaVinci Resolve/Support/Developer/OpenFX",
         "DLSS_SDK_ROOT": "C:/path/to/DLSS",
+        "CUDAToolkit_ROOT": "C:/path/to/CUDA/v12",
+        "FIDELITYFX_SDK_ROOT": "C:/path/to/FSR-SDK-v2.3.0",
+        "NVOF_SDK_ROOT": "C:/path/to/NVIDIAOpticalFlowSDK",
+        "DXC_PATH": "C:/path/to/dxc.exe",
         "DLSSNR_RUNTIME_DLL": "C:/path/to/nvngx_dlssnr.dll"
       }
     }
@@ -16,6 +20,16 @@
       "name": "local-release",
       "configurePreset": "local-vs2022-x64",
       "configuration": "Release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "local-release",
+      "configurePreset": "local-vs2022-x64",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
     }
   ]
 }

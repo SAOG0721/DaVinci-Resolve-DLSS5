@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.4.0] - 2026-10-03
+
+Experimental validation build, based on revision 5. See the complete
+[bilingual release notes](docs/RELEASE_NOTES_v0.4.0.md).
+
+- Add original-float net correction, explicit SDR/HDR encoding, Oklab detail,
+  protection, compression and frequency controls.
+- Add independent 1–3-pass NR, shared D3D12/NGX resource leases and latest-frame
+  result reuse.
+- Add AMDOF/NVOF and an optional Fusion float RGBA MotionVectors input that
+  bypasses estimation. Internal flow needs at most the current/previous frame.
+- Remove all-history replay/prefetch and Legacy UI groups; retain hidden IDs.
+- Fix unsupported optional OFX properties, unaligned output readback ranges,
+  and add bounded CPU parallelism, fused compositing and stage/cache timings.
+- Five standalone test groups and native parameter round trips pass. Actual
+  r5 OFX timeline render/export and real-content performance remain pending.
+- Antiflicker, bidirectional confidence, GPU post/CUDA bridge, inference
+  scaling, disk preparation cache and complete fault recovery remain planned.
+- Binary and source archives exclude community runtimes, SDKs and drivers.
+
 All notable project changes are documented here.
 
 ## 0.3.1-experimental - 2026-08-31
