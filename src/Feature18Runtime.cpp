@@ -1431,6 +1431,7 @@ bool Feature18Runtime::process(const float* source, int sourceRowBytes, float* d
 }
 
 const std::string& Feature18Runtime::lastError() const noexcept { return impl_->lastError; }
+ID3D12Device* Feature18Runtime::deviceForPostprocessing() const noexcept { return impl_->device.Get(); }
 
 void Feature18Runtime::reset() {
     std::scoped_lock executionLock(g_runtimeExecutionMutex);

@@ -6,6 +6,7 @@
 #include <string>
 
 #include "Feature18Parameters.h"
+struct ID3D12Device;
 
 namespace resolve_dlss5 {
 
@@ -37,6 +38,7 @@ class Feature18Runtime final {
 
     [[nodiscard]] const std::string& lastError() const noexcept;
     void reset();
+    [[nodiscard]] ID3D12Device* deviceForPostprocessing() const noexcept;
 
    private:
     struct Impl;

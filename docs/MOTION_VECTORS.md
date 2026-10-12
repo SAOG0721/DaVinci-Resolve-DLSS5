@@ -1,25 +1,43 @@
 # Motion vectors / 光流与外部运动
 
-Internal methods are None, AMDOF and NVOF. None supplies zero motion and still runs NR. AMDOF has Performance (half resolution) and Quality (full resolution). NVOF profiles combine output grid and SDK preset:
+## 内部光流
 
-| UI profile | Grid / preset |
+**Flow Method** 提供 None、AMDOF、NVOF。None 使用零运动并继续 NR 处理；AMDOF 提供 Performance（半分辨率）和 Quality（全分辨率）。
+
+| NVOF 质量 | 用途 |
 | --- | --- |
-| Performance | 4 / FAST |
-| Balanced | 4 / MEDIUM |
-| Quality (default) | 4 / SLOW |
-| High Quality | 2 / MEDIUM |
-| Highest Quality | 2 / SLOW |
+| Performance | 优先处理速度 |
+| Balanced | 平衡速度与质量 |
+| Quality（默认） | 更充分的运动估算 |
+| High Quality | 使用更细的运动网格 |
+| Highest Quality | 更细网格与更高质量估算 |
 
-Unsupported grid/preset combinations report an error. They do not silently change quality. Internal estimation fetches at most the current and previous valid source frames; the first source frame uses zero motion. Every NR pass consumes the same motion.
+所有 NR Pass 共用同一份运动。启用抗闪烁时也可复用该运动；NR Flow Method=None 时，抗闪烁的 AF Flow 可独立选择 AMDOF 或 NVOF。详见 [Anti-flicker](ANTI_FLICKER.md)。
 
-Fusion 中开启 **External Motion** 后读取 **MotionVectors**，内部方法/质量隐藏并保留设置。关闭开关后恢复内部设置。外部数据必须满足：
+## Fusion 外部运动
 
-- 与 Source 相同尺寸、bounds 和像素宽高比的 **float RGBA** 图。
-- **当前帧到前一帧**，默认 R=X、G=Y、源像素单位，向右/向下为正。
-- 可选不同 RGBA 通道、归一化 UV、Y 向上与额外倍率。UV 向量分别乘宽/高；倍率用于单位换算。
-- 原生 Fusion Vector/AOV 或 EXR 命名通道需上游映射到 RGBA。本版不直接读取这些多平面通道。
-- 不经过色彩变换、0–1 裁切、有损压缩。前一帧到当前帧的光流需空间反演，单纯取负号不能得到正确的反向场。
+将运动图连接到 **MotionVectors**，开启 **External MV**。**Motion Input** 显示连接状态。内部方法和质量设置在外部模式下隐藏，关闭 External MV 后恢复。
 
-Missing/unconnected images, mismatched domains/PAR, identical X/Y channels, nonfinite values and values outside the FP16 motion range are rejected. External mode does not fall back to estimation. Based on the host Render interaction flag, failures can return the original image with an error during interaction and fail formal renders; actual host handling remains to be verified.
+输入格式：
 
-已知向右 4、向下 2 的平移测试在七个内部质量档位得到中值 (-4,-2)。这证明合成帧的方向与单位合同，不证明真实素材画质或导出验收。深度仍置零；双向光流、遮挡/cost 置信度和出口抗闪烁尚未实现。
+- float RGBA，尺寸、图像边界和像素宽高比与 Source 一致。
+- 当前帧到前一帧的运动，默认 R=X、G=Y，以源像素为单位，X 向右、Y 向下为正。
+- X/Y Channel 选择分量通道；Vector Units 支持源像素和归一化 UV；Positive Y Up 与 X/Y Scale 调整方向和倍率。
+
+Fusion Vector/AOV 或 EXR 命名通道可在上游映射为 RGBA。保持运动数据的有符号数值和原始范围，采用原始数据通路与无损格式。将前一帧到当前帧的光流转换为当前帧到前一帧时，需要空间反演。
+
+仅跳过 NR 光流估算时，使用 **External MV=Off / Flow Method=None**。要同时跳过抗闪烁光流估算，选择 Off 或 Static。
+
+连接或格式问题通过节点提示反馈。交互预览在可用时显示原图，导出通过 Resolve 报告处理错误。修正连接或关闭 External MV 后恢复处理。
+
+## English
+
+**Flow Method** offers None, AMDOF and NVOF. None supplies zero motion while NR continues. AMDOF provides Performance (half resolution) and Quality (full resolution); NVOF offers Performance, Balanced, Quality, High Quality and Highest Quality.
+
+All NR passes share the motion field. Anti-flicker can reuse it, or select an independent AMDOF/NVOF provider through AF Flow when NR Flow Method is None.
+
+In Fusion, connect a float RGBA motion image to **MotionVectors** and enable **External MV**. Match the source dimensions, bounds and pixel aspect ratio. Use current-to-previous motion; defaults are R=X, G=Y, source-pixel units, positive X right and positive Y down. X/Y Channel, Vector Units, Positive Y Up and X/Y Scale adapt the input convention.
+
+Map named Vector/AOV or EXR channels into RGBA upstream and preserve signed raw values with lossless storage. Converting previous-to-current flow requires spatial inversion.
+
+**Motion Input** displays connection status. Use **External MV=Off / Flow Method=None** to skip NR estimation, and Off or Static to also skip anti-flicker estimation. Connection/format issues are reported by the node; interactive preview uses the original image when available, while export reports a processing error. Correcting the connection or disabling External MV resumes processing.

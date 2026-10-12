@@ -29,6 +29,13 @@ try:
     group_ids = {name for name, value in nr_inputs.items() if value.get('INPID_InputControl') == 'NestControl'}
     controls = {name: value for name, value in nr_inputs.items() if name not in group_ids}
     assert 'nrOpticalFlow' in group_ids, 'Missing optical flow group'
+    assert 'nrAntiFlicker' in group_ids, 'Missing anti-flicker group'
+    for name in ('nrAntiFlickerMode','nrAntiFlickerStrength','nrAntiFlickerResponse','nrAntiFlickerFrameRate','nrTemporalFlowMethod'):
+        assert name in controls, f'Missing anti-flicker control: {name}'
+    assert tool.GetInput('nrAntiFlickerMode',0)==0, 'Anti-flicker must default off'
+    assert tool.GetInput('nrAntiFlickerResponse',0)==80, 'Default response changed'
+    assert tool.GetInput('nrAntiFlickerFrameRate',0)==0, 'Default frame rate must be automatic'
+    assert 'nrMotionStatus' in controls, 'Motion connection status missing'
     assert 'nrHistory' not in group_ids and 'nrGuidance' not in group_ids, 'Legacy groups still exposed'
     for name in ('nrExternalMotion','nrOpticalFlowMethod','nrAmdFlowQuality','nrNvidiaFlowQuality',
                  'nrExternalXChannel','nrExternalYChannel','nrExternalUnits','nrExternalYUp',
@@ -50,6 +57,10 @@ try:
     tool.SetInput('nrExternalYUp',1,0)
     tool.SetInput('nrExternalScaleX',2,0)
     tool.SetInput('nrExternalMotion',0,0)
+    tool.SetInput('nrAntiFlickerMode',3,0)
+    tool.SetInput('nrAntiFlickerResponse',120,0)
+    tool.SetInput('nrAntiFlickerStrength',.65,0)
+    tool.SetInput('nrAntiFlickerFrameRate',60)
     assert tool.GetInput('nrExternalScaleX',0)==2
     assert tool.GetInput('nrNvidiaFlowQuality',0)==4
     assert controls['nrInputEncoding']['INPN_MaxAllowed'] == 6, 'Missing color encodings'
@@ -111,6 +122,10 @@ try:
     assert restored.GetInput('nrExternalUnits',0)==1
     assert restored.GetInput('nrExternalYUp',0)==1
     assert restored.GetInput('nrExternalScaleX',0)==2
+    assert restored.GetInput('nrAntiFlickerMode',0)==3
+    assert restored.GetInput('nrAntiFlickerResponse',0)==120
+    assert abs(restored.GetInput('nrAntiFlickerStrength',0)-.65)<1e-6
+    assert restored.GetInput('nrAntiFlickerFrameRate',0)==60
     assert restored.GetInput('nrHistoryStartFrame', 0) == tool.GetInput('nrHistoryStartFrame', 0)
     result = {
         'Host': resolve.GetProductName(), 'Version': resolve.GetVersionString(),
@@ -123,6 +138,7 @@ try:
         'LegacyGroupsRemoved': True, 'ExternalMotionConnectorPresent': True,
         'ExternalMotionLinkAccepted': True,
         'OpticalFlowSettingsRoundTripPassed': True,
+        'AntiFlickerSettingsRoundTripPassed': True,
         'SettingsRoundTripPassed': True,
         'ProjectSavedOrEdited': False, 'FrameRendered': False,
         'NativeInspectorVisuallyVerified': False,

@@ -1,14 +1,14 @@
-# Resolve DLSS5 0.4.0
+# Resolve DLSS5 0.4.1
 
 简体中文 | [English](README.md)
 
-为 DaVinci Resolve 提供 DLSS Neural Rendering，支持 SDR/HDR 细节、色彩与保护控制，最多三次 NR，以及光流估算和外部运动输入。0.4.0 为实验版本。
+为 DaVinci Resolve 提供 DLSS Neural Rendering，支持 SDR/HDR 细节、色彩与保护控制，最多三次 NR，以及光流估算、外部运动输入和可选抗闪烁。0.4.1 为实验版本。
 
 ## 下载
 
 访问 [GitHub Releases](https://github.com/SAOG0721/DaVinci-Resolve-DLSS5/releases)。
 
-安装请下载 `ResolveDLSS5-0.4.0-win64.zip`。源码使用发布页面自带的 **Source code (zip)** 或 **Source code (tar.gz)**。
+安装请下载 `ResolveDLSS5-0.4.1-win64.zip`。源码使用发布页面自带的 **Source code (zip)** 或 **Source code (tar.gz)**。
 
 插件包包含 OFX bundle、社区 DLSSNR 运行库、安装/回退脚本、使用说明和许可文件。
 
@@ -18,14 +18,14 @@
 | --- | --- |
 | 系统 | Windows x64 |
 | Resolve | 版本目标：20.0.1 build 6 及以上 |
-| GPU | RTX 40 或 RTX 50 系 |
+| GPU | 计划支持 RTX 40 / RTX 50 系 |
 | 运行库 | 随包提供社区修改版 `nvngx_dlssnr.dll` 310.8.0.0，也可选择其他兼容 Feature 18 的运行库 |
 
 参考环境：Resolve Studio 20.0.1.6、RTX 5070 Ti、NVIDIA 驱动 616.92。GPU 初始化还取决于所安装的驱动与兼容运行库。
 
 ## 安装
 
-解压插件包，在其中的 `0.4.0` 目录打开 PowerShell，使用随包运行库预览安装：
+解压插件包，在其中的 `0.4.1` 目录打开 PowerShell，使用随包运行库预览安装：
 
 ```powershell
 .\Install.ps1 -Validation
@@ -55,9 +55,8 @@
 2. 从 **1 Pass** 开始，调整 **Overall Strength** 与 **Output Mix**。
 3. 使用 **Chroma Strength**、**Lightness**、**Shadow/Structure**、**Highlight/Glow** 控制总修正，开启 **Advanced** 调整保护、压缩与频率。
 4. 选择 **Flow Method** 和质量，默认 **NVOF / Quality**。**None** 使用零运动，NR 继续处理。
-5. 根据画面和处理时间选择更多 Pass 或更高光流质量。
-
-所有 Pass 完成后，将总修正合成到原始 float 图像；细节与保护参数统一调整这一总修正。
+5. 在 **Anti-flicker / Mode** 选择抗闪烁模式，从 Static 或 Flow 开始，调整 Strength 与 Response (ms)。
+6. 根据画面和处理时间选择更多 Pass 或更高光流质量。
 
 ## 主要参数
 
@@ -69,9 +68,14 @@
 | Advanced | 展示色相/暗部/亮部保护、Soft Compression、Low Frequency、High Frequency |
 | NR Pass Count | 选择 1–3 次 NR，每次分别设置风格、强度、色调、结构、皮肤与遮罩 |
 | Flow Method | 选择 None、AMDOF 或 NVOF |
-| External Motion | 读取 Fusion MotionVectors，跳过内部估算 |
+| External MV | 读取 Fusion MotionVectors，跳过内部估算 |
+| Anti-flicker | 选择 Off、Static、Flow、Flow+ 或 Low Frequency，调整 Strength 与 Response (ms) |
 | Output View | Processed、Difference x10、Split View |
 | Reset NR | 在下一次渲染重置时序历史 |
+
+抗闪烁的 **Frame Rate** 默认 0，自动使用宿主提供的媒体帧率；可输入合成或媒体的实际 FPS。
+
+**Motion Input** 显示外部运动的连接状态。仅跳过估算时使用 **External MV=Off、Flow Method=None**；使用外部数据时连接 MotionVectors 并开启 External MV。
 
 隐藏的 Pass 参数保留数值。高分辨率、更多 Pass、进阶保护/频率与更高光流质量会增加处理时间。
 
@@ -83,7 +87,7 @@ HDR 的 **White (nits)** 为参考白，**Peak (nits)** 为参考峰值，默认
 
 ## Fusion 运动输入
 
-将 float RGBA 运动图连接到 **MotionVectors**，开启 **External Motion**。数据方向为当前帧到前一帧，尺寸、bounds、像素宽高比与原图一致；默认 R=X、G=Y、源像素单位，X 向右、Y 向下为正。
+将 float RGBA 运动图连接到 **MotionVectors**，开启 **External MV**。数据方向为当前帧到前一帧，尺寸、bounds、像素宽高比与原图一致；默认 R=X、G=Y、源像素单位，X 向右、Y 向下为正。
 
 面板提供 X/Y Channel、Vector Units、Positive Y Up 和 X/Y Scale。命名 Vector/AOV 或 EXR 通道在上游映射为 RGBA，并保留运动图的有符号原始数据。详见[运动输入设置](docs/MOTION_VECTORS.md)。
 
@@ -95,4 +99,6 @@ HDR 的 **White (nits)** 为参考白，**Peak (nits)** 为参考峰值，默认
 
 ## 源码与许可
 
-参见[发布说明](docs/RELEASE_NOTES_v0.4.0.md)、[源码构建](docs/BUILDING.md)、[LICENSE](LICENSE) 与[第三方许可](THIRD_PARTY_NOTICES.md)。
+抗闪烁模式、运动来源与播放行为见 [Anti-flicker](docs/ANTI_FLICKER.md)。
+
+参见[发布说明](docs/RELEASE_NOTES_v0.4.1.md)、[源码构建](docs/BUILDING.md)、[LICENSE](LICENSE) 与[第三方许可](THIRD_PARTY_NOTICES.md)。

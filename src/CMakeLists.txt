@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(ResolveDlss5 VERSION 0.4.0 LANGUAGES CXX)
+project(ResolveDlss5 VERSION 0.4.1 LANGUAGES CXX RC)
 
 if(NOT WIN32)
     message(FATAL_ERROR "ResolveDlss5 currently supports Windows only")
@@ -124,10 +124,27 @@ set(OFX_SUPPORT_SOURCES
     "${OFX_SUPPORT_LIBRARY_DIR}/ofxsPropertyValidation.cpp"
 )
 
+set(TEMPORAL_SHADER_DIRECTORY "${CMAKE_BINARY_DIR}/TemporalShaders")
+get_filename_component(_shader_compiler_directory "${DXC_PATH}" DIRECTORY)
+set(FXC_PATH "${_shader_compiler_directory}/fxc.exe" CACHE FILEPATH "FXC compiler for precompiled temporal shaders")
+if(NOT EXISTS "${FXC_PATH}")
+    message(FATAL_ERROR "Set FXC_PATH to the Windows SDK fxc.exe for temporal shader compilation")
+endif()
+add_custom_command(OUTPUT "${TEMPORAL_SHADER_DIRECTORY}/Temporalmain.h" "${TEMPORAL_SHADER_DIRECTORY}/Temporalreduce.h"
+    COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/scripts/Compile-TemporalShaders.ps1"
+        -Source "${CMAKE_CURRENT_SOURCE_DIR}/TemporalShader.h" -OutputDirectory "${TEMPORAL_SHADER_DIRECTORY}" -FxcPath "${FXC_PATH}"
+    DEPENDS TemporalShader.h scripts/Compile-TemporalShaders.ps1 VERBATIM)
+add_custom_target(CompileTemporalShaders DEPENDS "${TEMPORAL_SHADER_DIRECTORY}/Temporalmain.h" "${TEMPORAL_SHADER_DIRECTORY}/Temporalreduce.h")
+
+configure_file(ResolveDlss5Version.rc.in "${CMAKE_CURRENT_BINARY_DIR}/ResolveDlss5Version.rc" @ONLY)
 add_library(ResolveDlss5 MODULE
+    "${CMAKE_CURRENT_BINARY_DIR}/ResolveDlss5Version.rc"
     ColorPipeline.cpp
     GpuResourcePool.cpp
     TimelineProcessor.cpp
+    AntiFlicker.cpp
+    FrameGuidanceCache.cpp
+    TemporalGpu.cpp
     Feature18Runtime.cpp
     Feature18Runtime.h
     ResolveDlss5Plugin.cpp
@@ -137,6 +154,7 @@ add_library(ResolveDlss5 MODULE
 )
 
 target_include_directories(ResolveDlss5 PRIVATE
+    "${TEMPORAL_SHADER_DIRECTORY}"
     "${CMAKE_CURRENT_SOURCE_DIR}"
     "${OFX_INCLUDE_DIR}"
     "${OFX_SUPPORT_INCLUDE_DIR}"
@@ -144,6 +162,7 @@ target_include_directories(ResolveDlss5 PRIVATE
 )
 
 target_compile_definitions(ResolveDlss5 PRIVATE
+    RESOLVE_DLSS5_VERSION="${PROJECT_VERSION}"
     NOMINMAX
     WIN32_LEAN_AND_MEAN
     _CRT_SECURE_NO_WARNINGS
@@ -153,6 +172,29 @@ if(MSVC)
     target_compile_options(ResolveDlss5 PRIVATE /W4 /permissive- /EHsc /utf-8)
 endif()
 
+add_executable(ResolveDlss5TemporalTests ../tests/TemporalTests.cpp AntiFlicker.cpp FrameGuidanceCache.cpp TemporalGpu.cpp GpuResourcePool.cpp ColorPipeline.cpp)
+target_include_directories(ResolveDlss5TemporalTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories(ResolveDlss5TemporalTests PRIVATE "${TEMPORAL_SHADER_DIRECTORY}")
+add_dependencies(ResolveDlss5 CompileTemporalShaders)
+add_dependencies(ResolveDlss5TemporalTests CompileTemporalShaders)
+target_compile_definitions(ResolveDlss5TemporalTests PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_compile_options(ResolveDlss5TemporalTests PRIVATE /W4 /permissive- /utf-8)
+target_link_libraries(ResolveDlss5TemporalTests PRIVATE bcrypt d3d12 dxgi d3dcompiler)
+enable_testing()
+add_test(NAME ResolveDlss5.AntiFlicker COMMAND ResolveDlss5TemporalTests)
+add_test(NAME ResolveDlss5.AntiFlickerGpu COMMAND ResolveDlss5TemporalTests --gpu)
+set_tests_properties(ResolveDlss5.AntiFlickerGpu PROPERTIES RUN_SERIAL TRUE TIMEOUT 180)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+set(RESOLVE_DLSS5_EVIDENCE_SUBDIR "v${PROJECT_VERSION}-fusion" CACHE STRING "Local validation evidence folder")
+add_test(NAME ResolveDlss5.OfxHarness COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../tests/OfxHarness.py"
+    --plugin "$<TARGET_FILE:ResolveDlss5>" --sdk "${OFX_INCLUDE_DIR}"
+    --output "${CMAKE_CURRENT_SOURCE_DIR}/../tests/results/${RESOLVE_DLSS5_EVIDENCE_SUBDIR}/ofx-harness.json")
+set_tests_properties(ResolveDlss5.OfxHarness PROPERTIES RUN_SERIAL TRUE TIMEOUT 180)
+add_test(NAME ResolveDlss5.FusionContracts COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../tests/FusionContracts.py"
+    --plugin "$<TARGET_FILE:ResolveDlss5>" --sdk "${OFX_INCLUDE_DIR}"
+    --output "${CMAKE_CURRENT_SOURCE_DIR}/../tests/results/${RESOLVE_DLSS5_EVIDENCE_SUBDIR}/fusion-contracts.json")
+set_tests_properties(ResolveDlss5.FusionContracts PROPERTIES RUN_SERIAL TRUE TIMEOUT 180)
+
 target_link_libraries(ResolveDlss5 PRIVATE
     ResolveOpticalFlow
     CUDA::cuda_driver
@@ -160,6 +202,7 @@ target_link_libraries(ResolveDlss5 PRIVATE
     dxgi
     version
     bcrypt
+    d3dcompiler
     "${DLSS_SDK_ROOT}/lib/Windows_x86_64/x64/nvsdk_ngx_s.lib"
 )
 

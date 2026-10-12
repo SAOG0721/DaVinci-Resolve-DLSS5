@@ -1,10 +1,10 @@
-# Resolve DLSS5 0.4.0 安装 / Installation
+# Resolve DLSS5 0.4.1 安装 / Installation
 
 解压后包含 `ResolveDlss5.ofx.bundle`、`Install.ps1`、`Restore.ps1` 和本说明。社区修改版 `nvngx_dlssnr.dll` 310.8.0.0 位于插件的 `Contents\Win64\runtime` 目录。
 
 ## 安装
 
-1. 关闭 DaVinci Resolve，在解压后的 `0.4.0` 目录打开管理员 PowerShell。
+1. 关闭 DaVinci Resolve，在解压后的 `0.4.1` 目录打开管理员 PowerShell。
 2. 使用随包运行库预览安装：
 
 ```powershell
@@ -32,7 +32,7 @@
 
 ## English
 
-The plugin includes the community-modified `nvngx_dlssnr.dll` 310.8.0.0 in `Contents\Win64\runtime`. Close Resolve and open administrator PowerShell in the extracted `0.4.0` directory.
+The plugin includes the community-modified `nvngx_dlssnr.dll` 310.8.0.0 in `Contents\Win64\runtime`. Close Resolve and open administrator PowerShell in the extracted `0.4.1` directory.
 
 Preview with `Install.ps1 -Validation`, then add `-Apply` to install. To select another compatible DLSSNR runtime, add `-RuntimeDll <path>`.
 

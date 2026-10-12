@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 #pragma once
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <functional>
@@ -37,6 +38,11 @@ class TimelineProcessor {
                   TimelineDomain domain = TimelineDomain::Interactive, double frameStep = 1.0);
     void invalidate();
     const TimelineStats& stats() const { return stats_; }
+    std::array<unsigned char, 32> sourceDigest() const {
+        std::array<unsigned char, 32> result{};
+        if (committed_) std::copy_n(committed_->digest.begin(), 32, result.begin());
+        return result;
+    }
 
    private:
     struct Signature {

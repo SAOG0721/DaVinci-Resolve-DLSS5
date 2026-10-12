@@ -1,27 +1,33 @@
 [CmdletBinding()]
 param(
     [switch]$Validation,
+    [string]$OutputDirectory='',
     [string]$RuntimeDll='C:\Program Files\Common Files\OFX\Plugins\ResolveDlss5.ofx.bundle\Contents\Win64\runtime\nvngx_dlssnr.dll'
 )
 $ErrorActionPreference='Stop'
 $projectRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
-$candidateRoot=Join-Path $projectRoot 'dist\0.4.0'
+$versionMatch=[regex]::Match((Get-Content -LiteralPath (Join-Path $projectRoot 'src\CMakeLists.txt') -Raw),'project\(ResolveDlss5 VERSION (\d+\.\d+\.\d+) ')
+if(!$versionMatch.Success){throw 'Project version was not found'}
+$version=$versionMatch.Groups[1].Value
+$candidateRoot=Join-Path $projectRoot ('dist\'+$version)
 $manifest=Get-Content -LiteralPath (Join-Path $candidateRoot 'manifest.json') -Raw | ConvertFrom-Json
 $bundleName='ResolveDlss5.ofx.bundle'
 $pluginRelative='Contents\Win64\ResolveDlss5.ofx'
 $plugin=Join-Path (Join-Path $candidateRoot $bundleName) $pluginRelative
 $buildPlugin=Join-Path $projectRoot 'build\Release\ResolveDlss5.ofx'
-if($manifest.Version -ne '0.4.0' -or $manifest.ReleaseReady -or $manifest.RuntimeIncluded){throw 'Unexpected development package manifest'}
+if($manifest.Version -ne $version -or $manifest.ReleaseReady -or $manifest.RuntimeIncluded){throw 'Unexpected development package manifest'}
 if($manifest.DeploymentAllowed -ne $true -and !($Validation -and $manifest.ValidationAllowed -eq $true)){
     throw ('Distribution is blocked: '+$manifest.BlockedReason)
 }
 foreach($binaryPath in @($plugin,$buildPlugin)){
     if((Get-FileHash -LiteralPath $binaryPath -Algorithm SHA256).Hash -ne $manifest.PluginSHA256){throw 'Package does not match the tested build binary'}
 }
-$reportPath=Join-Path $projectRoot 'tests\results\ctest-release.xml'
+$reportPath=Join-Path $projectRoot ('tests\results\'+$manifest.EvidenceSubdirectory+'\ctest-release.xml')
 [xml]$testReport=Get-Content -LiteralPath $reportPath -Raw
 $expectedTests=@('ResolveDlss5.Feature18RuntimeSmoke','ResolveDlss5.Core','ResolveDlss5.TimelineRuntimeSmoke','ResolveDlss5.GpuContracts')
 if([int]$manifest.PackageRevision -ge 4){$expectedTests+='ResolveDlss5.OpticalFlow'}
+if([int]$manifest.PackageRevision -ge 7){$expectedTests+=@('ResolveDlss5.AntiFlicker','ResolveDlss5.AntiFlickerGpu','ResolveDlss5.OfxHarness')}
+if([int]$manifest.PackageRevision -ge 8){$expectedTests+='ResolveDlss5.FusionContracts'}
 if([int]$testReport.testsuite.tests -ne $expectedTests.Count -or $testReport.testsuite.failures -ne '0' -or $testReport.testsuite.skipped -ne '0'){
     throw 'All successful production contract tests are required'
 }
@@ -32,16 +38,20 @@ foreach($name in $expectedTests){
 }
 $evidenceRoot=Join-Path $projectRoot ('tests\results\'+$manifest.EvidenceSubdirectory)
 $evidence=Get-Content -LiteralPath (Join-Path $evidenceRoot 'host-evidence.json') -Raw | ConvertFrom-Json
-$parameterPath=Join-Path $evidenceRoot 'parameters.json'
+$parameterFile=if($evidence.ParameterReportFile){[string]$evidence.ParameterReportFile}else{'parameters.json'}
+if($parameterFile -notmatch '^[A-Za-z0-9._-]+\.json$'){throw 'Invalid parameter report filename'}
+$parameterPath=Join-Path $evidenceRoot $parameterFile
 if($evidence.PluginSHA256 -ne $manifest.PluginSHA256 -or
    (Get-FileHash -LiteralPath $parameterPath).Hash -ne $evidence.ParameterReportSHA256){throw 'Validation evidence differs from this binary'}
-$zipName='ResolveDLSS5-0.4.0-win64.zip'
-$zipPath=Join-Path $projectRoot ('dist\'+$zipName)
+$zipName='ResolveDLSS5-'+$version+'-win64.zip'
+if(!$OutputDirectory){$OutputDirectory=Join-Path $projectRoot 'dist'}
+New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
+$zipPath=Join-Path $OutputDirectory $zipName
 if(Test-Path -LiteralPath $zipPath){throw 'Distribution ZIP already exists; preserve it before repackaging'}
 if(!(Test-Path -LiteralPath $RuntimeDll -PathType Leaf)){throw 'Provide the authorized community runtime DLL to include in the binary package'}
 # Always use a fresh staging directory: candidate/debug documents stay outside the ZIP.
 $stageBase=Join-Path $projectRoot ('build\minimal-distribution-'+[guid]::NewGuid().ToString('N'))
-$packageRoot=Join-Path $stageBase '0.4.0'
+$packageRoot=Join-Path $stageBase $version
 New-Item -ItemType Directory -Path $packageRoot | Out-Null
 Copy-Item -LiteralPath (Join-Path $candidateRoot $bundleName) -Destination $packageRoot -Recurse
 $runtimeDirectory=Join-Path $packageRoot ($bundleName+'\Contents\Win64\runtime')
@@ -90,7 +100,7 @@ $archive=[IO.Compression.ZipFile]::OpenRead($zipPath)
 try {
     if(@($archive.Entries | Where-Object {$_.Name}).Count -ne $hashes.Count){throw 'Unexpected ZIP payload count'}
     foreach($item in $hashes){
-        $entry=$archive.GetEntry('0.4.0/'+$item.Path)
+        $entry=$archive.GetEntry($version+'/'+$item.Path)
         if(!$entry -or $entry.Length -ne $item.Bytes){throw ('Missing ZIP entry: '+$item.Path)}
         $stream=$entry.Open();$algorithm=[Security.Cryptography.SHA256]::Create()
         try {$actual=[BitConverter]::ToString($algorithm.ComputeHash($stream)).Replace('-','')}
@@ -105,6 +115,6 @@ $zipHash=(Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash
     ValidationOnly=[bool]$Validation;ReleaseReady=$false;RuntimeIncluded=$true;TestsPassed=$expectedTests.Count;
     Archive=$zipName;ArchiveSHA256=$zipHash;ArchiveBytes=(Get-Item -LiteralPath $zipPath).Length;
     TopLevelEntries=$roots;PayloadCount=$hashes.Count;ZipContentVerified=$true;Payload=$hashes
-} | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath (Join-Path $projectRoot 'dist\distribution-audit.json') -Encoding utf8
+} | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath (Join-Path $OutputDirectory 'distribution-audit.json') -Encoding utf8
 Write-Output ('Verified minimal distribution: '+$zipPath)
 Write-Output ('SHA256: '+$zipHash)

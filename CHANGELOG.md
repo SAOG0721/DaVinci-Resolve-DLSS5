@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.1] - 2026-10-12
+
+- Improve Fusion error reporting, recovery and media frame-rate handling.
+- Add Motion Input status and automatic/manual Anti-flicker Frame Rate.
+- Add optional SDR/HDR Anti-flicker with Off, Static, Flow, Flow+ and Low Frequency modes.
+- Expose Strength, Response (ms) and independent AF Flow selection.
+- Share motion input and GPU resources; retain streaming history during sequential playback.
+- See [bilingual release notes](docs/RELEASE_NOTES_v0.4.1.md) for controls and usage.
+
 ## [0.4.0] - 2026-10-04
 
 - Add SDR/HDR correction, detail, protection, compression and frequency controls.

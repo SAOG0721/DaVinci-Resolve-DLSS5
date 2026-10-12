@@ -14,9 +14,11 @@
 #include <stdexcept>
 #include <string>
 
+#include "AntiFlicker.h"
 #include "ColorPipeline.h"
 #include "Feature18Parameters.h"
 #include "Feature18Runtime.h"
+#include "FrameGuidanceCache.h"
 #include "OpticalFlow.h"
 #include "TimelineProcessor.h"
 #include "ofxGPURender.h"
@@ -26,14 +28,16 @@ namespace {
 constexpr char kPluginName[] = "DLSS Neural Video Experimental";
 constexpr char kPluginGrouping[] = "DLSS Experimental";
 constexpr char kPluginDescription[] =
-    "Experimental SDR/HDR same-resolution neural video filter with float-base "
+    "Resolve DLSS5 " RESOLVE_DLSS5_VERSION
+    ". Experimental SDR/HDR same-resolution neural video filter with float-base "
     "net correction, Oklab controls, 1-3 independent NR passes and streaming "
     "history. Seeks reset history; partial exports can differ from a full sequential export. "
     "AMDOF/NVOF and external float motion input share one field across all NR passes. "
-    "Antiflicker and CUDA bridge are not available yet. Export errors stop "
-    "rendering.";
+    "Optional static, motion and low-frequency stabilization controls the final correction.";
 constexpr char kPluginIdentifier[] = "com.saog.resolve.dlss5";
 constexpr int kPluginVersionMajor = 0;
+// OFX has a major/minor ABI version. Keep the 0.4 instance contract for patch
+// releases; the description and Windows version resource carry 0.4.1.
 constexpr int kPluginVersionMinor = 4;
 
 constexpr char kParamEnabled[] = "nrEnabled";
@@ -102,6 +106,32 @@ class ResolveDlss5Plugin final : public OFX::ImageEffect {
 
     void render(const OFX::RenderArguments& arguments) override {
         std::scoped_lock lock(stateMutex_);
+        const bool preview = arguments.interactiveRenderStatus || sequenceInteractive_;
+        renderStage_ = "render-arguments";
+        renderBounds_ = {};
+        renderOutputBounds_ = {};
+        lastTemporalFps_ = 0;
+        frameRateSource_ = "unused";
+        try {
+            renderFrame(arguments, preview);
+            clearRuntimeMessage();
+        } catch (const std::exception& error) {
+            const auto* suite = dynamic_cast<const OFX::Exception::Suite*>(&error);
+            const int status = suite ? suite->status() : kOfxStatFailed;
+            // Reporting is non-throwing, and the original error is recorded
+            // before consulting any optional host notification interface.
+            reportRuntimeError(arguments, preview, status, error.what());
+            resetAfterFailure();
+            if (preview && copyPreviewSource(arguments)) return;
+            OFX::throwSuiteStatusException(status);
+        } catch (...) {
+            reportRuntimeError(arguments, preview, kOfxStatFailed, "Unknown render exception");
+            resetAfterFailure();
+            OFX::throwSuiteStatusException(kOfxStatFailed);
+        }
+    }
+
+    void renderFrame(const OFX::RenderArguments& arguments, bool preview) {
         using Clock = std::chrono::steady_clock;
         const auto start = Clock::now();
         const auto milliseconds = [](auto begin, auto end) {
@@ -109,24 +139,22 @@ class ResolveDlss5Plugin final : public OFX::ImageEffect {
         };
         if (arguments.isEnabledCudaRender || arguments.isEnabledOpenCLRender ||
             arguments.isEnabledMetalRender) {
-            const std::string error =
-                "Host supplied GPU images, but this development build requires CPU float RGBA; "
-                "CUDA=" +
-                std::to_string(arguments.isEnabledCudaRender) +
-                ", OpenCL=" + std::to_string(arguments.isEnabledOpenCLRender) +
-                ", Metal=" + std::to_string(arguments.isEnabledMetalRender);
-            setPersistentMessage(OFX::Message::eMessageError, "ResolveDlss5Runtime", error);
-            runtimeErrorVisible_ = true;
-            resolve_dlss5::writeDiagnosticLog(error);
-            OFX::throwSuiteStatusException(kOfxStatErrUnsupported);
+            renderStage_ = "host-gpu-images-require-cpu-bridge";
+            throw OFX::Exception::Suite(kOfxStatErrUnsupported);
         }
+        renderStage_ = "fetch-output";
         std::unique_ptr<OFX::Image> destination(destinationClip_->fetchImage(arguments.time));
+        renderStage_ = "fetch-source";
         std::unique_ptr<OFX::Image> source(sourceClip_->fetchImage(arguments.time));
+        renderStage_ = "image-format";
         validateImage(destination.get());
         validateImage(source.get());
         const auto bounds = source->getBounds();
         const auto out = destination->getBounds();
         const auto window = arguments.renderWindow;
+        renderBounds_ = bounds;
+        renderOutputBounds_ = out;
+        renderStage_ = "render-window";
         if (window.x2 < window.x1 || window.y2 < window.y1 || window.x1 < out.x1 ||
             window.x2 > out.x2 || window.y1 < out.y1 || window.y2 > out.y2 ||
             window.x1 < bounds.x1 || window.x2 > bounds.x2 || window.y1 < bounds.y1 ||
@@ -135,7 +163,9 @@ class ResolveDlss5Plugin final : public OFX::ImageEffect {
         if (window.x1 == window.x2 || window.y1 == window.y2) return;
         const auto fetched = Clock::now();
         const int width = bounds.x2 - bounds.x1, height = bounds.y2 - bounds.y1;
+        renderStage_ = "parameters";
         auto settings = settingsAt(arguments.time);
+        const auto temporal = antiFlickerAt(arguments.time);
         settings.premultiplied = source->getPreMultiplication() == OFX::eImagePreMultiplied;
         double mix = outputMix_->getValueAtTime(arguments.time);
         int view = 0;
@@ -143,91 +173,160 @@ class ResolveDlss5Plugin final : public OFX::ImageEffect {
         std::vector<float> pixels;
         bool processed = false;
         resolve_dlss5::RuntimeTimings nrTimings;
-        double neuralMs = 0, compositeMs = 0;
+        double neuralMs = 0, compositeMs = 0, temporalMs = 0;
         bool cacheHit = false, modelReset = false;
-        try {
-            if (settings.enabled && !(view == 0 && (mix == 0 || settings.detail.strength == 0))) {
-                if (resetRequested_) {
-                    timeline_.invalidate();
-                    runtime_->reset();
-                    flow_.reset();
-                    resetRequested_ = false;
-                }
-                auto current = packedFrame(*source, arguments.time, bounds);
-                current.flow = flowAt(arguments.time);
-                if (current.flow.external) {
-                    if (!motionClip_->isConnected())
-                        throw std::runtime_error(
-                            "External motion input is enabled but MotionVectors is not connected");
-                    std::unique_ptr<OFX::Image> external(motionClip_->fetchImage(arguments.time));
-                    validateImage(external.get());
-                    if (std::abs(motionClip_->getPixelAspectRatio() -
-                                 sourceClip_->getPixelAspectRatio()) > 1e-6)
-                        throw std::runtime_error(
-                            "External motion and source pixel aspect ratios differ");
-                    const auto packed = packedFrame(*external, arguments.time, bounds);
-                    current.motion = resolve_dlss5::adaptExternalMotion(packed.pixels, width,
-                                                                        height, current.flow);
-                } else if (current.flow.method != resolve_dlss5::FlowMethod::None) {
-                    const auto refTime = referenceTime(arguments.time);
-                    if (refTime != arguments.time) {
-                        std::unique_ptr<OFX::Image> reference(sourceClip_->fetchImage(refTime));
-                        validateImage(reference.get());
-                        current.referencePixels =
-                            packedFrame(*reference, arguments.time, bounds).pixels;
-                    }
-                }
-                const auto cacheHits = timeline_.stats().cacheHits;
-                const auto neural = timeline_.render(
-                    arguments.time, current,
-                    [&](const resolve_dlss5::CpuFrame& frame, bool reset) {
-                        modelReset = reset;
-                        std::vector<float> result(frame.pixels.size());
-                        auto motion = frame.motion;
-                        if (!frame.flow.external &&
-                            frame.flow.method != resolve_dlss5::FlowMethod::None &&
-                            !frame.referencePixels.empty())
-                            motion =
-                                flow_.estimate(frame.pixels, frame.referencePixels, frame.width,
-                                               frame.height, frame.settings, frame.flow);
-                        if (!runtime_->process(
-                                frame.pixels.data(), frame.width * 16, result.data(),
-                                frame.width * 16, frame.width, frame.height, frame.settings, reset,
-                                true, motion.empty() ? nullptr : motion.data(), &nrTimings))
-                            throw std::runtime_error(runtime_->lastError());
-                        return result;
-                    },
-                    [&] { runtime_->reset(); }, [&] { return abort(); },
-                    arguments.interactiveRenderStatus ? resolve_dlss5::TimelineDomain::Interactive
-                                                      : resolve_dlss5::TimelineDomain::Export,
-                    current.flow.external || current.flow.method != resolve_dlss5::FlowMethod::None
-                        ? 1.0
-                        : (arguments.interactiveRenderStatus ? 1.0 : sequenceFrameStep_));
-                const auto compositeStart = Clock::now();
-                cacheHit = timeline_.stats().cacheHits != cacheHits;
-                neuralMs = milliseconds(fetched, compositeStart);
-                resolve_dlss5::compositeProxyFrame(current.pixels, *neural, width, height, settings,
-                                                   pixels);
-                applyOutputView(
-                    static_cast<const float*>(source->getPixelAddress(bounds.x1, bounds.y1)),
-                    source->getRowBytes(), pixels.data(), width * 16, width, height,
-                    arguments.time);
-                compositeMs = milliseconds(compositeStart, Clock::now());
-                processed = true;
-                if (runtimeErrorVisible_) {
-                    clearPersistentMessage();
-                    runtimeErrorVisible_ = false;
+        if (settings.enabled && !(view == 0 && (mix == 0 || settings.detail.strength == 0))) {
+            if (resetRequested_) {
+                timeline_.invalidate();
+                runtime_->reset();
+                flow_.reset();
+                guidance_.invalidate();
+                sharedMotion_.reset();
+                antiFlicker_.invalidate();
+                resetRequested_ = false;
+            }
+            renderStage_ = "pack-source";
+            auto current = packedFrame(*source, arguments.time, bounds);
+            current.flow = flowAt(arguments.time);
+            const auto demand = demandedFlowAt(arguments.time);
+            std::vector<float> temporalReference;
+            if (current.flow.external) {
+                renderStage_ = "external-motion";
+                if (!motionClip_->isConnected())
+                    throw std::runtime_error(
+                        "External motion input is enabled but MotionVectors is not connected");
+                std::unique_ptr<OFX::Image> external(motionClip_->fetchImage(arguments.time));
+                validateImage(external.get());
+                if (std::abs(external->getPixelAspectRatio() - source->getPixelAspectRatio()) >
+                    1e-6)
+                    throw std::runtime_error(
+                        "External motion and source pixel aspect ratios differ");
+                const auto packed = packedFrame(*external, arguments.time, bounds);
+                current.motion =
+                    resolve_dlss5::adaptExternalMotion(packed.pixels, width, height, current.flow);
+            } else if (demand.method != resolve_dlss5::FlowMethod::None) {
+                renderStage_ = "reference-frame";
+                const auto refTime = referenceTime(arguments.time);
+                if (refTime != arguments.time) {
+                    std::unique_ptr<OFX::Image> reference(sourceClip_->fetchImage(refTime));
+                    validateImage(reference.get());
+                    auto referencePixels = packedFrame(*reference, refTime, bounds).pixels;
+                    if (current.flow.method != resolve_dlss5::FlowMethod::None)
+                        current.referencePixels = std::move(referencePixels);
+                    else
+                        temporalReference = std::move(referencePixels);
                 }
             }
-        } catch (const std::exception& error) {
-            timeline_.invalidate();
-            resetRequested_ = true;
-            setPersistentMessage(OFX::Message::eMessageError, "ResolveDlss5Runtime", error.what());
-            runtimeErrorVisible_ = true;
-            resolve_dlss5::writeDiagnosticLog(std::string("Render failed: ") + error.what());
-            // A failed export must not silently succeed with an untreated frame.
-            if (!arguments.interactiveRenderStatus) OFX::throwSuiteStatusException(kOfxStatFailed);
+            const auto cacheHits = timeline_.stats().cacheHits;
+            renderStage_ = "nr";
+            const auto neural = timeline_.render(
+                arguments.time, current,
+                [&](const resolve_dlss5::CpuFrame& frame, bool reset) {
+                    modelReset = reset;
+                    std::vector<float> result(frame.pixels.size());
+                    sharedMotion_.reset();
+                    if (frame.flow.external ||
+                        (!frame.referencePixels.empty() &&
+                         frame.flow.method != resolve_dlss5::FlowMethod::None))
+                        sharedMotion_ = guidance_.get(
+                            arguments.time, width, height, frame.settings, frame.flow, frame.pixels,
+                            frame.referencePixels, frame.motion, [&] {
+                                return frame.flow.external
+                                           ? frame.motion
+                                           : flow_.estimate(frame.pixels, frame.referencePixels,
+                                                            width, height, frame.settings,
+                                                            frame.flow);
+                            });
+                    if (!runtime_->process(
+                            frame.pixels.data(), frame.width * 16, result.data(), frame.width * 16,
+                            frame.width, frame.height, frame.settings, reset, true,
+                            sharedMotion_ ? sharedMotion_->data() : nullptr, &nrTimings))
+                        throw std::runtime_error(runtime_->lastError());
+                    return result;
+                },
+                [&] { runtime_->reset(); }, [&] { return abort(); },
+                preview ? resolve_dlss5::TimelineDomain::Interactive
+                        : resolve_dlss5::TimelineDomain::Export,
+                current.flow.external || current.flow.method != resolve_dlss5::FlowMethod::None
+                    ? 1.0
+                    : (preview ? 1.0 : sequenceFrameStep_));
+            const auto compositeStart = Clock::now();
+            renderStage_ = "composite";
+            cacheHit = timeline_.stats().cacheHits != cacheHits;
+            neuralMs = milliseconds(fetched, compositeStart);
+            resolve_dlss5::compositeProxyFrame(current.pixels, *neural, width, height, settings,
+                                               pixels);
+            const auto temporalStart = Clock::now();
+            renderStage_ = "antiflicker";
+            if (resolve_dlss5::needsTemporalMotion(temporal.mode) && temporal.strength > 0 &&
+                !current.flow.external && current.flow.method == resolve_dlss5::FlowMethod::None) {
+                sharedMotion_.reset();
+                if (!temporalReference.empty())
+                    sharedMotion_ = guidance_.get(
+                        arguments.time, width, height, current.settings, demand, current.pixels,
+                        temporalReference, {}, [&] {
+                            return flow_.estimate(current.pixels, temporalReference, width, height,
+                                                  current.settings, demand);
+                        });
+            }
+            if (temporal.mode != resolve_dlss5::AntiFlickerMode::Off && temporal.strength > 0) {
+                resolve_dlss5::TemporalFrameContext context;
+                context.time = arguments.time;
+                context.fps = temporalFrameRate();
+                context.frameStep = preview ? 1 : sequenceFrameStep_;
+                context.width = width;
+                context.height = height;
+                context.originX = bounds.x1;
+                context.originY = bounds.y1;
+                context.scaleX = arguments.renderScale.x;
+                context.scaleY = arguments.renderScale.y;
+                context.pixelAspect = source->getPixelAspectRatio();
+                context.interactive = preview;
+                context.reset = modelReset;
+                context.inputRevision = timeline_.stats().evaluatedFrames;
+                context.guidanceRevision =
+                    resolve_dlss5::needsTemporalMotion(temporal.mode) ? guidance_.revision() : 0;
+                context.source = timeline_.sourceDigest();
+                context.hasReference =
+                    resolve_dlss5::needsTemporalMotion(temporal.mode) && !demand.external &&
+                    (!current.referencePixels.empty() || !temporalReference.empty());
+                context.reference = guidance_.referenceDigest();
+                context.guidance = resolve_dlss5::needsTemporalMotion(temporal.mode)
+                                       ? demand
+                                       : resolve_dlss5::FlowSettings{};
+                if (context.fps > 0 && std::isfinite(context.pixelAspect) &&
+                    context.pixelAspect > 0) {
+                    antiFlicker_.setGpuDevice(runtime_->deviceForPostprocessing());
+                    antiFlicker_.process(context, settings, temporal, current.pixels, pixels,
+                                         sharedMotion_ ? std::span<const float>(*sharedMotion_)
+                                                       : std::span<const float>{});
+                    temporalWarning_.clear();
+                } else {
+                    antiFlicker_.setGpuDevice(nullptr);
+                    antiFlicker_.invalidate();
+                    temporalWarning(
+                        "Anti-flicker needs a valid media frame rate/pixel aspect ratio. "
+                        "Set Frame Rate in Anti-flicker when the host omits it. NR remains "
+                        "active.");
+                }
+            } else {
+                antiFlicker_.setGpuDevice(nullptr);
+                antiFlicker_.invalidate();
+                lastTemporalFps_ = 0;
+                frameRateSource_ = "unused";
+                temporalWarning_.clear();
+            }
+            temporalMs = milliseconds(temporalStart, Clock::now());
+            applyOutputView(
+                static_cast<const float*>(source->getPixelAddress(bounds.x1, bounds.y1)),
+                source->getRowBytes(), pixels.data(), width * 16, width, height, arguments.time);
+            compositeMs = milliseconds(compositeStart, Clock::now());
+            processed = true;
+        } else {
+            antiFlicker_.setGpuDevice(nullptr);
+            antiFlicker_.invalidate();
         }
+        renderStage_ = "write-output";
         for (int y = window.y1; y < window.y2; ++y) {
             if (abort()) OFX::throwSuiteStatusException(kOfxStatFailed);
             const float* row =
@@ -250,12 +349,16 @@ class ResolveDlss5Plugin final : public OFX::ImageEffect {
                 ", total=" + std::to_string(milliseconds(start, end)) +
                 ", fetch=" + std::to_string(milliseconds(start, fetched)) + ", neural-path=" +
                 std::to_string(neuralMs) + ", composite=" + std::to_string(compositeMs) +
-                ", cache=" + (cacheHit ? "hit" : "miss") + ", model-reset=" +
-                (modelReset ? "1" : "0") + ", nr-lock=" + std::to_string(nrTimings.lockMs) +
+                ", antiflicker=" + std::to_string(temporalMs) +
+                ", af-weight=" + std::to_string(antiFlicker_.stats().historyWeight) +
+                ", af-cache-hits=" + std::to_string(antiFlicker_.stats().cacheHits) + ", cache=" +
+                (cacheHit ? "hit" : "miss") + ", model-reset=" + (modelReset ? "1" : "0") +
+                ", nr-lock=" + std::to_string(nrTimings.lockMs) +
                 ", nr-init=" + std::to_string(nrTimings.initializeMs) +
                 ", nr-prepare=" + std::to_string(nrTimings.prepareMs) +
-                ", nr-submit-wait=" + std::to_string(nrTimings.submitWaitMs) +
-                ", nr-readback=" + std::to_string(nrTimings.readbackMs));
+                ", nr-submit-wait=" + std::to_string(nrTimings.submitWaitMs) + ", nr-readback=" +
+                std::to_string(nrTimings.readbackMs) + ", fps=" + std::to_string(lastTemporalFps_) +
+                ", fps-source=" + frameRateSource_ + ", preview=" + std::to_string(preview));
         }
     }
 
@@ -276,7 +379,7 @@ class ResolveDlss5Plugin final : public OFX::ImageEffect {
 
     void getFramesNeeded(const OFX::FramesNeededArguments& arguments,
                          OFX::FramesNeededSetter& setter) override {
-        const auto flow = flowAt(arguments.time);
+        const auto flow = demandedFlowAt(arguments.time);
         const auto ref = flow.external || flow.method == resolve_dlss5::FlowMethod::None
                              ? arguments.time
                              : referenceTime(arguments.time);
@@ -285,9 +388,12 @@ class ResolveDlss5Plugin final : public OFX::ImageEffect {
             setter.setFramesNeeded(*motionClip_, {arguments.time, arguments.time});
     }
     void changedParam(const OFX::InstanceChangedArgs& args, const std::string& name) override {
+        if (name == "nrMotionStatus") return;
         std::scoped_lock lock(stateMutex_);
         if (name == "nrPassCount" || name == kParamInputEncoding || name == kParamAdvanced ||
-            name == "nrExternalMotion" || name == "nrOpticalFlowMethod")
+            name == "nrExternalMotion" || name == "nrOpticalFlowMethod" ||
+            name == "nrAntiFlickerMode" || name == "nrTemporalFlowMethod" ||
+            name == "nrAntiFlickerStrength")
             refreshParameterVisibility(true, args.time);
         // Display switches never change the image or advance/reset NR history.
         if (name == kParamAdvanced || name == kParamLegacyGuidance ||
@@ -295,7 +401,12 @@ class ResolveDlss5Plugin final : public OFX::ImageEffect {
             name == kParamGuidanceMode || name == kParamDepthConvention ||
             name == kParamMotionScaleX || name == kParamMotionScaleY)
             return;
-        const auto flow = flowAt(args.time);
+        const auto flow = demandedFlowAt(args.time);
+        const auto nrFlow = flowAt(args.time);
+        if (name == "nrTemporalFlowMethod" &&
+            (nrFlow.external || nrFlow.method != resolve_dlss5::FlowMethod::None ||
+             !resolve_dlss5::needsTemporalMotion(antiFlickerAt(args.time).mode)))
+            return;
         if ((flow.external && (name == "nrOpticalFlowMethod" || name == "nrAmdFlowQuality" ||
                                name == "nrNvidiaFlowQuality")) ||
             (!flow.external && name.starts_with("nrExternal")) ||
@@ -304,6 +415,12 @@ class ResolveDlss5Plugin final : public OFX::ImageEffect {
             (!flow.external && name == "nrNvidiaFlowQuality" &&
              flow.method != resolve_dlss5::FlowMethod::Nvidia))
             return;
+        if (name.starts_with("nrAntiFlicker") || name == "nrTemporalFlowMethod" ||
+            (nrFlow.method == resolve_dlss5::FlowMethod::None &&
+             (name == "nrAmdFlowQuality" || name == "nrNvidiaFlowQuality"))) {
+            antiFlicker_.invalidate();
+            return;
+        }
         const bool outputOnly = name == kParamOutputMix || name == kParamOutputView ||
                                 name == kParamHdrTransfer || name == "nrResidualStrength" ||
                                 name == "nrResidualLightness" || name == "nrResidualChroma" ||
@@ -314,22 +431,34 @@ class ResolveDlss5Plugin final : public OFX::ImageEffect {
         if (!outputOnly) {
             int count = 0;
             fetchChoiceParam("nrPassCount")->getValue(count);
-            if (!(count < 1 && name.starts_with("nrPass2")) &&
-                !(count < 2 && name.starts_with("nrPass3")))
-                resetRequested_ = true;
+            if ((count < 1 && name.starts_with("nrPass2")) ||
+                (count < 2 && name.starts_with("nrPass3")))
+                return;
+            resetRequested_ = true;
         }
+        if (name != kParamOutputMix && name != kParamOutputView) antiFlicker_.invalidate();
+        if (name == kParamOutputMix && outputMix_->getValueAtTime(args.time) == 0)
+            antiFlicker_.invalidate();
     }
     void changedClip(const OFX::InstanceChangedArgs&, const std::string&) override {
         std::scoped_lock lock(stateMutex_);
         resetRequested_ = true;
+        refreshMotionStatus();
     }
     void beginSequenceRender(const OFX::BeginSequenceRenderArguments& args) override {
         std::scoped_lock lock(stateMutex_);
         sequenceFrameStep_ =
             std::isfinite(args.frameStep) && args.frameStep > 0 ? args.frameStep : 1;
-        if (!args.isInteractive) {
+        sequenceInteractive_ = args.isInteractive || args.interactiveRenderStatus;
+        // Fusion can wrap each preview frame in a separate Begin/End pair.
+        // Reset only a new explicit multi-frame export; timeline/domain keys
+        // handle seeks, reversals, geometry and parameter changes themselves.
+        if (!sequenceInteractive_ && args.frameRange.max > args.frameRange.min) {
             timeline_.invalidate();
             flow_.reset();
+            guidance_.invalidate();
+            sharedMotion_.reset();
+            antiFlicker_.invalidate();
         }
         resolve_dlss5::writeDiagnosticLog(
             "Sequence begin: frameStep=" + std::to_string(args.frameStep) + ", range=" +
@@ -342,6 +471,187 @@ class ResolveDlss5Plugin final : public OFX::ImageEffect {
     }
 
    private:
+    void resetAfterFailure() noexcept {
+        try {
+            timeline_.invalidate();
+            antiFlicker_.setGpuDevice(nullptr);
+            antiFlicker_.invalidate();
+            guidance_.invalidate();
+            sharedMotion_.reset();
+            flow_.reset();
+            resetRequested_ = true;
+        } catch (...) {
+            resetRequested_ = true;
+        }
+    }
+
+    void notifyWithoutThrow(const std::string& text, bool error) noexcept {
+        try {
+            const auto* host = OFX::getImageEffectHostDescription();
+            if (error && host && host->supportsMessageSuiteV2) {
+                setPersistentMessage(OFX::Message::eMessageError, "ResolveDlss5Runtime", text);
+                runtimeErrorVisible_ = true;
+            } else {
+                // V1 log messages reach the host console without modal dialogs.
+                sendMessage(OFX::Message::eMessageLog, "ResolveDlss5Runtime", text);
+            }
+        } catch (...) {
+            resolve_dlss5::writeDiagnosticLog(
+                "Host notification unavailable; original diagnostic retained");
+        }
+    }
+
+    void clearRuntimeMessage() noexcept {
+        if (runtimeErrorVisible_) {
+            try {
+                const auto* host = OFX::getImageEffectHostDescription();
+                if (host && host->supportsMessageSuiteV2) clearPersistentMessage();
+            } catch (...) {
+                resolve_dlss5::writeDiagnosticLog(
+                    "Host message clear failed; processed output retained");
+            }
+            runtimeErrorVisible_ = false;
+        }
+        runtimeError_.clear();
+    }
+
+    void reportRuntimeError(const OFX::RenderArguments& args, bool preview, int status,
+                            const char* error) noexcept {
+        try {
+            const std::string cause = std::string(renderStage_) + ": " + error;
+            const bool changed = cause != runtimeError_;
+            const auto now = std::chrono::steady_clock::now();
+            if (changed || now - lastErrorLog_ >= std::chrono::seconds(1)) {
+                lastErrorLog_ = now;
+                const auto* host = OFX::getImageEffectHostDescription();
+                resolve_dlss5::writeDiagnosticLog(
+                    "Render failed: " + cause + ", status=" + std::to_string(status) +
+                    ", node=" + std::to_string(reinterpret_cast<std::uintptr_t>(this)) +
+                    ", host=" + (host ? host->hostName : "unknown") +
+                    ", time=" + std::to_string(args.time) + ", preview=" + std::to_string(preview) +
+                    ", render-interactive=" + std::to_string(args.interactiveRenderStatus) +
+                    ", sequence-interactive=" + std::to_string(sequenceInteractive_) +
+                    ", sequential=" + std::to_string(args.sequentialRenderStatus) +
+                    ", CUDA=" + std::to_string(args.isEnabledCudaRender) +
+                    ", OpenCL=" + std::to_string(args.isEnabledOpenCLRender) +
+                    ", Metal=" + std::to_string(args.isEnabledMetalRender) + ", scale=" +
+                    std::to_string(args.renderScale.x) + ":" + std::to_string(args.renderScale.y) +
+                    ", source-bounds=" + std::to_string(renderBounds_.x1) + ":" +
+                    std::to_string(renderBounds_.y1) + ":" + std::to_string(renderBounds_.x2) +
+                    ":" + std::to_string(renderBounds_.y2) +
+                    ", output-bounds=" + std::to_string(renderOutputBounds_.x1) + ":" +
+                    std::to_string(renderOutputBounds_.y1) + ":" +
+                    std::to_string(renderOutputBounds_.x2) + ":" +
+                    std::to_string(renderOutputBounds_.y2) + ", fps=" +
+                    std::to_string(lastTemporalFps_) + ", fps-source=" + frameRateSource_);
+            }
+            runtimeError_ = cause;
+            if (changed) notifyWithoutThrow(cause, true);
+        } catch (...) {
+            resolve_dlss5::writeDiagnosticLog("Render failed; diagnostic formatting unavailable");
+        }
+    }
+
+    bool copyPreviewSource(const OFX::RenderArguments& args) noexcept {
+        if (args.isEnabledCudaRender || args.isEnabledOpenCLRender || args.isEnabledMetalRender)
+            return false;
+        try {
+            if (abort()) return false;
+            std::unique_ptr<OFX::Image> source(sourceClip_->fetchImage(args.time));
+            std::unique_ptr<OFX::Image> output(destinationClip_->fetchImage(args.time));
+            validateImage(source.get());
+            validateImage(output.get());
+            const auto w = args.renderWindow;
+            if (w.x2 < w.x1 || w.y2 < w.y1) return false;
+            if (w.x1 == w.x2 || w.y1 == w.y2) return true;
+            for (int y = w.y1; y < w.y2; ++y)
+                if (!source->getPixelAddress(w.x1, y) || !source->getPixelAddress(w.x2 - 1, y) ||
+                    !output->getPixelAddress(w.x1, y) || !output->getPixelAddress(w.x2 - 1, y))
+                    return false;
+            for (int y = w.y1; y < w.y2; ++y)
+                std::memcpy(output->getPixelAddress(w.x1, y), source->getPixelAddress(w.x1, y),
+                            static_cast<size_t>(w.x2 - w.x1) * 16);
+            return true;
+        } catch (...) {
+            return false;
+        }
+    }
+
+    void temporalWarning(const std::string& warning) {
+        if (warning == temporalWarning_) return;
+        temporalWarning_ = warning;
+        resolve_dlss5::writeDiagnosticLog("Temporal warning: " + warning);
+        notifyWithoutThrow(warning, false);
+    }
+
+    double temporalFrameRate() {
+        const double manual = fetchDoubleParam("nrAntiFlickerFrameRate")->getValue();
+        const auto valid = [](double fps) { return std::isfinite(fps) && fps > 0; };
+        double fps = 0;
+        std::string failures;
+        const auto read = [&](const char* label, auto getter) {
+            try {
+                const double value = getter();
+                if (valid(value)) {
+                    frameRateSource_ = label;
+                    return value;
+                }
+                failures += std::string(label) + ": invalid " + std::to_string(value) + "; ";
+            } catch (const std::exception& e) {
+                failures += std::string(label) + ": " + e.what() + "; ";
+            }
+            return 0.;
+        };
+        if (valid(manual)) {
+            fps = manual;
+            frameRateSource_ = "manual";
+        } else {
+            fps = read("source", [&] { return sourceClip_->getFrameRate(); });
+            if (!fps)
+                fps = read("unmapped-source", [&] { return sourceClip_->getUnmappedFrameRate(); });
+            if (!fps) fps = read("effect", [&] { return getFrameRate(); });
+        }
+        lastTemporalFps_ = fps;
+        if (!fps) frameRateSource_ = "unknown";
+        if (failures != frameRateFailures_) {
+            frameRateFailures_ = failures;
+            if (!failures.empty())
+                resolve_dlss5::writeDiagnosticLog("Frame rate fallback: " + failures);
+        }
+        return fps;
+    }
+
+    void refreshMotionStatus() noexcept {
+        try {
+            const bool external = fetchBooleanParam("nrExternalMotion")->getValue();
+            const char* status = external ? (motionClip_->isConnected() ? "External MV connected"
+                                                                        : "Connect MotionVectors")
+                                          : "Use Flow Method: None / AMDOF / NVOF";
+            fetchStringParam("nrMotionStatus")->setValue(status);
+        } catch (...) {
+            resolve_dlss5::writeDiagnosticLog("Motion input status display unavailable");
+        }
+    }
+
+    resolve_dlss5::AntiFlickerSettings antiFlickerAt(double time) const {
+        resolve_dlss5::AntiFlickerSettings s;
+        int mode = 0;
+        fetchChoiceParam("nrAntiFlickerMode")->getValueAtTime(time, mode);
+        s.mode = static_cast<resolve_dlss5::AntiFlickerMode>(mode);
+        s.strength =
+            static_cast<float>(fetchDoubleParam("nrAntiFlickerStrength")->getValueAtTime(time));
+        s.responseSeconds = static_cast<float>(
+            fetchDoubleParam("nrAntiFlickerResponse")->getValueAtTime(time) * .001);
+        return s;
+    }
+    resolve_dlss5::FlowSettings demandedFlowAt(double time) const {
+        const auto s = antiFlickerAt(time);
+        int fallback = 1;
+        fetchChoiceParam("nrTemporalFlowMethod")->getValueAtTime(time, fallback);
+        return resolve_dlss5::guidanceDemand(
+            flowAt(time), resolve_dlss5::needsTemporalMotion(s.mode) && s.strength > 0,
+            fallback == 0 ? resolve_dlss5::FlowMethod::Amd : resolve_dlss5::FlowMethod::Nvidia);
+    }
     resolve_dlss5::FlowSettings flowAt(double time) const {
         resolve_dlss5::FlowSettings s;
         int value = 0;
@@ -404,13 +714,23 @@ class ResolveDlss5Plugin final : public OFX::ImageEffect {
              {kParamPaperWhite, kParamHdrTransfer, "nrReferenceWhite", "nrPeakNits"})
             show(id, hdr);
         const auto flow = flowAt(time);
+        const auto demand = demandedFlowAt(time);
+        const auto temporal = antiFlickerAt(time);
+        const bool temporalActive = temporal.mode != resolve_dlss5::AntiFlickerMode::Off;
+        show("nrAntiFlickerStrength", temporalActive);
+        show("nrAntiFlickerResponse", temporalActive);
+        show("nrAntiFlickerFrameRate", temporalActive);
+        show("nrTemporalFlowMethod", !flow.external &&
+                                         flow.method == resolve_dlss5::FlowMethod::None &&
+                                         resolve_dlss5::needsTemporalMotion(temporal.mode));
         show("nrOpticalFlowMethod", !flow.external);
-        show("nrAmdFlowQuality", !flow.external && flow.method == resolve_dlss5::FlowMethod::Amd);
+        show("nrAmdFlowQuality", !flow.external && demand.method == resolve_dlss5::FlowMethod::Amd);
         show("nrNvidiaFlowQuality",
-             !flow.external && flow.method == resolve_dlss5::FlowMethod::Nvidia);
+             !flow.external && demand.method == resolve_dlss5::FlowMethod::Nvidia);
         for (const char* id : {"nrExternalXChannel", "nrExternalYChannel", "nrExternalUnits",
                                "nrExternalYUp", "nrExternalScaleX", "nrExternalScaleY"})
             show(id, flow.external);
+        refreshMotionStatus();
     }
 
     static void validateImage(const OFX::Image* image) {
@@ -578,8 +898,17 @@ class ResolveDlss5Plugin final : public OFX::ImageEffect {
     std::mutex stateMutex_;
     resolve_dlss5::TimelineProcessor timeline_;
     resolve_dlss5::OpticalFlow flow_;
+    resolve_dlss5::FrameGuidanceCache guidance_;
+    resolve_dlss5::FrameGuidanceCache::Output sharedMotion_;
+    resolve_dlss5::AntiFlicker antiFlicker_;
     double sequenceFrameStep_ = 1;
     bool runtimeErrorVisible_ = false;
+    bool sequenceInteractive_ = false;
+    const char* renderStage_ = "idle";
+    OfxRectI renderBounds_{}, renderOutputBounds_{};
+    double lastTemporalFps_ = 0;
+    std::string frameRateSource_ = "unused", frameRateFailures_, runtimeError_, temporalWarning_;
+    std::chrono::steady_clock::time_point lastErrorLog_{};
     bool resetRequested_ = true;
     std::uint64_t renderCount_ = 0;
     std::chrono::steady_clock::time_point lastTimingLog_{};
@@ -866,8 +1195,8 @@ void ResolveDlss5PluginFactory::describeInContext(OFX::ImageEffectDescriptor& de
         "Select the actual node input. Index 0 preserves the legacy sRGB interpretation; it does "
         "not detect project color management.",
         0,
-        {"sRGB (default)", "sRGB", "Linear Rec.709", "Rec.2020 PQ",
-         "Rec.709 2.4", "Rec.2020 HLG", "Linear Rec.2020"},
+        {"sRGB (default)", "sRGB", "Linear Rec.709", "Rec.2020 PQ", "Rec.709 2.4", "Rec.2020 HLG",
+         "Linear Rec.2020"},
         codec));
     auto* hdr = descriptor.defineGroupParam("nrHdrControls");
     hdr->setLabels("HDR Reference", "HDR Reference", "HDR Reference");
@@ -916,11 +1245,20 @@ void ResolveDlss5PluginFactory::describeInContext(OFX::ImageEffectDescriptor& de
     flow->setLabels("Optical Flow", "Optical Flow", "Optical Flow");
     flow->setOpen(true);
     page->addChild(*flow);
-    page->addChild(
-        *defineBoolean(descriptor, "nrExternalMotion", "External Motion",
-                       "Skip internal estimation and read current-to-previous float vectors from MotionVectors. "
-                       "Invalid/missing input reports an error. All NR passes share one field.",
-                       false, flow));
+    page->addChild(*defineBoolean(
+        descriptor, "nrExternalMotion", "External MV",
+        "Use connected MotionVectors instead of internal estimation. To skip motion without "
+        "external data, leave this off and choose Flow Method None. All NR passes share one field.",
+        false, flow));
+    auto* motionStatus = descriptor.defineStringParam("nrMotionStatus");
+    motionStatus->setLabels("Motion Input", "Motion Input", "Motion Input");
+    motionStatus->setStringType(OFX::eStringTypeSingleLine);
+    motionStatus->setDefault("Use Flow Method: None / AMDOF / NVOF");
+    motionStatus->setEnabled(false);
+    motionStatus->setAnimates(false);
+    motionStatus->setEvaluateOnChange(false);
+    motionStatus->setParent(*flow);
+    page->addChild(*motionStatus);
     page->addChild(*defineChoice(descriptor, "nrOpticalFlowMethod", "Flow Method",
                                  "Estimate only the current/previous source pair, once for all NR "
                                  "passes. No whole-clip replay.",
@@ -929,13 +1267,11 @@ void ResolveDlss5PluginFactory::describeInContext(OFX::ImageEffectDescriptor& de
         descriptor, "nrAmdFlowQuality", "AMDOF Quality",
         "Performance uses half-size input; Quality uses full-size FidelityFX optical flow.", 1,
         {"Performance", "Quality"}, flow));
-    page->addChild(*defineChoice(descriptor, "nrNvidiaFlowQuality", "NVOF Quality",
-                                 "Magpie profiles: 4/FAST, 4/MEDIUM, 4/SLOW, 2/MEDIUM, 2/SLOW. "
-                                 "High/Highest Quality cost more. Unsupported profiles report an error.",
-                                 2,
-                                 {"Performance", "Balanced", "Quality", "High Quality",
-                                  "Highest Quality"},
-                                 flow));
+    page->addChild(*defineChoice(
+        descriptor, "nrNvidiaFlowQuality", "NVOF Quality",
+        "Magpie profiles: 4/FAST, 4/MEDIUM, 4/SLOW, 2/MEDIUM, 2/SLOW. "
+        "High/Highest Quality cost more. Unsupported profiles report an error.",
+        2, {"Performance", "Balanced", "Quality", "High Quality", "Highest Quality"}, flow));
     page->addChild(
         *defineChoice(descriptor, "nrExternalXChannel", "X Channel",
                       "Horizontal vector channel. Float data bypasses neural color encoding.", 0,
@@ -958,6 +1294,37 @@ void ResolveDlss5PluginFactory::describeInContext(OFX::ImageEffectDescriptor& de
     page->addChild(*defineDouble(descriptor, "nrExternalScaleY", "Y Scale",
                                  "Additional vertical conversion scale.", 1, -100, 100, .01, flow));
 
+    auto* temporal = descriptor.defineGroupParam("nrAntiFlicker");
+    temporal->setLabels("Anti-flicker", "Anti-flicker", "Anti-flicker");
+    temporal->setOpen(true);
+    page->addChild(*temporal);
+    page->addChild(*defineChoice(descriptor, "nrAntiFlickerMode", "Mode",
+                                 "Stabilize the combined signed correction. Sequential playback "
+                                 "accumulates; seeks reset history.",
+                                 0, {"Off", "Static", "Flow", "Flow+", "Low Frequency"}, temporal));
+    page->addChild(*defineDouble(descriptor, "nrAntiFlickerStrength", "Strength",
+                                 "Blend the temporal correction. Zero keeps the current correction "
+                                 "and clears temporal history.",
+                                 1, 0, 1, .01, temporal));
+    page->addChild(
+        *defineDouble(descriptor, "nrAntiFlickerResponse", "Response (ms)",
+                      "Media-time response: larger values give more memory. Default 80 ms.", 80, 10,
+                      500, 1, temporal));
+    auto* temporalRate = defineDouble(
+        descriptor, "nrAntiFlickerFrameRate", "Frame Rate",
+        "0 uses a valid host media frame rate. Enter the composition/media rate when the host "
+        "omits it. NR continues without temporal accumulation until a valid rate is available.",
+        0, 0, 480, .001, temporal);
+    temporalRate->setAnimates(false);
+    page->addChild(*temporalRate);
+    page->addChild(
+        *defineChoice(descriptor, "nrTemporalFlowMethod", "AF Flow",
+                      "Motion provider when NR Flow Method is None. NR keeps zero motion; "
+                      "temporal processing uses this field.",
+                      1, {"AMDOF", "NVOF"}, temporal));
+    for (const char* id : {"nrAntiFlickerStrength", "nrAntiFlickerResponse",
+                           "nrAntiFlickerFrameRate", "nrTemporalFlowMethod"})
+        descriptor.getParamDescriptor(id)->setIsSecret(true);
     auto* diagnostics = descriptor.defineGroupParam("nrDiagnostics");
     diagnostics->setLabels("Diagnostics", "Diagnostics", "Diagnostics");
     diagnostics->setHint(
@@ -975,9 +1342,8 @@ void ResolveDlss5PluginFactory::describeInContext(OFX::ImageEffectDescriptor& de
                       0, {"Processed", "Difference x10", "Split View"}, diagnostics));
 
     auto* reset = descriptor.definePushButtonParam(kParamReset);
-    reset->setLabels("Reset NR", "Reset NR",
-                     "Reset NR");
-    reset->setHint("Forces a Feature 18 history reset on the next render.");
+    reset->setLabels("Reset NR", "Reset NR", "Reset NR");
+    reset->setHint("Resets NR and anti-flicker history on the next render.");
     page->addChild(*reset);
     resolve_dlss5::writeDiagnosticLog("OFX parameter context description completed");
 } catch (const std::exception& error) {

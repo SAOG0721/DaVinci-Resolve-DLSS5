@@ -1,6 +1,6 @@
 # Contributing
 
-Use the documented Windows x64 build and run the five contract test groups with an authorized runtime where required. Keep CPU, real GPU, parameter API and native host results separate. Preserve explicit input-encoding and current-to-previous motion contracts, original float/alpha behavior, bounded temporal dependencies, cache signatures and fence-governed lifetimes.
+Use the documented Windows x64 build and run the nine contract test groups with an authorized runtime where required. Keep CPU, real GPU, parameter API and native host results separate. Preserve explicit input-encoding and current-to-previous motion contracts, original float/alpha behavior, bounded temporal dependencies, cache signatures and fence-governed lifetimes.
 
 Report Resolve/GPU/driver/runtime versions, source encoding and dimensions, pass count, optical-flow source/quality, timestamps and reproduction steps. Remove private paths or project details before sharing logs. Do not commit runtimes, SDKs, driver binaries, media, caches, personal CMake presets or generated outputs.
 

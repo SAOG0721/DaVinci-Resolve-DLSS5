@@ -13,6 +13,9 @@ $ErrorActionPreference='Stop'
 $projectRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $buildRoot=Join-Path $projectRoot 'build'
 $sourceRoot=Join-Path $projectRoot 'src'
+$versionMatch=[regex]::Match((Get-Content -LiteralPath (Join-Path $sourceRoot 'CMakeLists.txt') -Raw),'project\(ResolveDlss5 VERSION (\d+\.\d+\.\d+) ')
+if(!$versionMatch.Success){throw 'Project version was not found'}
+$version=$versionMatch.Groups[1].Value
 $cmakeCommand=Get-Command cmake.exe -ErrorAction SilentlyContinue
 $cmakePath=if($cmakeCommand){$cmakeCommand.Source}else{
     $vswhere=Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
@@ -39,13 +42,15 @@ if($CudaRoot){$configureArgs+="-DCUDAToolkit_ROOT=$CudaRoot"}
 if($LASTEXITCODE -ne 0){throw 'CMake configure failed'}
 & $cmakePath --build $buildRoot --config Release --parallel 6
 if($LASTEXITCODE -ne 0){throw 'Release build failed'}
-$resultRoot=Join-Path $projectRoot 'tests\results'
+$evidenceSubdirectory='v'+$version+'-fusion'
+$resultRoot=Join-Path $projectRoot ('tests\results\'+$evidenceSubdirectory)
 New-Item -ItemType Directory -Path $resultRoot -Force | Out-Null
 $ctestPath=Join-Path (Split-Path -Parent $cmakePath) 'ctest.exe'
 & $ctestPath --test-dir $buildRoot -C Release --output-on-failure --output-junit (Join-Path $resultRoot 'ctest-release.xml')
 if($LASTEXITCODE -ne 0){throw 'Production contract tests failed; no package created'}
+Copy-Item -LiteralPath (Join-Path $resultRoot 'ctest-release.xml') -Destination (Join-Path $projectRoot 'tests\results\ctest-release.xml') -Force
 if(!$Package){return}
-$deliveryRoot=Join-Path $projectRoot 'dist\0.4.0'
+$deliveryRoot=Join-Path $projectRoot ('dist\'+$version)
 $bundleRoot=Join-Path $deliveryRoot 'ResolveDlss5.ofx.bundle'
 $binaryRoot=Join-Path $bundleRoot 'Contents\Win64'
 $noticeRoot=Join-Path $bundleRoot 'Contents\licenses'
@@ -61,15 +66,15 @@ Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\THIRD_PARTY_NOTICES.md') -D
 'This software contains source code provided by NVIDIA Corporation.' | Set-Content -LiteralPath (Join-Path $noticeRoot 'NVIDIA-NOTICE.txt') -Encoding utf8
 $pluginHash=(Get-FileHash -LiteralPath (Join-Path $binaryRoot 'ResolveDlss5.ofx') -Algorithm SHA256).Hash
 [ordered]@{
-    Version='0.4.0'; PackageRevision=6; ReleaseReady=$false; TestsPassed=5;
-    EvidenceSubdirectory='release-040-labels';
+    Version=$version; PackageRevision=8; ReleaseReady=$false; TestsPassed=9;
+    EvidenceSubdirectory=$evidenceSubdirectory;
     DeploymentAllowed=$false;
     ValidationAllowed=$true;
-    BlockedReason='Streaming rework requires isolated Resolve render acceptance before normal installation or distribution.';
+    BlockedReason='Manual native Resolve preview/playback/export acceptance remains pending.';
     PluginRelativePath='Contents\Win64\ResolveDlss5.ofx'; PluginSHA256=$pluginHash;
     TestedRuntimeSHA256=$runtimeHash; RuntimeIncluded=$false;
-    SourceBaseline='a659e5c674388ea8026f4cf8df9f206826d12452';
-    Scope='0.4.0 with r5 rendering and compact panel labels/choice names; parameter IDs, defaults and numeric behavior preserved';
-    Pending='Manual Resolve host/export acceptance, sequential preparation cache, antiflicker, inference scaling, suffix cache, CUDA bridge, fault recovery and 40-series/higher-host validation'
+    SourceBaseline='ce52a3e425a105ab6215c1d4c0411215b873b49c';
+    Scope=($version+' Fusion-compatible error reporting, temporal bypass/time-base fallback, motion-input status and streaming history; existing IDs/defaults preserved');
+    Pending='Manual Resolve Inspector/playback/export acceptance, sequential preparation cache, inference scaling, suffix cache, CUDA bridge, full fault recovery and 40-series/higher-host validation'
 } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $deliveryRoot 'manifest.json') -Encoding utf8
 Write-Output "Development candidate prepared at $deliveryRoot; installation was not performed."

@@ -12,7 +12,7 @@ if(!$PackageRoot){
     $PackageRoot=if((Test-Path -LiteralPath (Join-Path $PSScriptRoot 'manifest.json')) -or
         (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'ResolveDlss5.ofx.bundle\Contents\package.json'))){
         $PSScriptRoot
-    }else{[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\dist\0.4.0'))}
+    }else{[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\dist\0.4.1'))}
 }
 $PackageRoot=[IO.Path]::GetFullPath($PackageRoot)
 $targetRoot='C:\Program Files\Common Files\OFX\Plugins\ResolveDlss5.ofx.bundle'
@@ -34,13 +34,15 @@ if((Get-FileHash -LiteralPath $sourcePlugin -Algorithm SHA256).Hash -ne $manifes
 if(!(Test-Path -LiteralPath $RuntimeDll -PathType Leaf)){throw 'Runtime DLL file was not found'}
 # Use the selected runtime; its hash checks copying and the restore receipt only.
 $runtimeHash=(Get-FileHash -LiteralPath $RuntimeDll -Algorithm SHA256).Hash
-if($manifest.Version -notin @('0.4.0','0.4.0-dev-s0')){throw 'Unsupported development manifest'}
+if($manifest.Version -notin @('0.4.1','0.4.0','0.4.0-dev-s0')){throw 'Unsupported development manifest'}
 $compactPackage=($manifest.InstallerFormat -eq 1)
 if($compactPackage){
     $summary=$manifest.ValidationSummary
     $requiredTests=@('ResolveDlss5.Feature18RuntimeSmoke','ResolveDlss5.Core',
         'ResolveDlss5.TimelineRuntimeSmoke','ResolveDlss5.GpuContracts')
     if([int]$manifest.PackageRevision -ge 4){$requiredTests+='ResolveDlss5.OpticalFlow'}
+    if([int]$manifest.PackageRevision -ge 7){$requiredTests+=@('ResolveDlss5.AntiFlicker','ResolveDlss5.AntiFlickerGpu','ResolveDlss5.OfxHarness')}
+    if([int]$manifest.PackageRevision -ge 8){$requiredTests+='ResolveDlss5.FusionContracts'}
     if(!$summary -or $summary.PluginSHA256 -ne $manifest.PluginSHA256 -or
         $summary.ContractReportSHA256 -notmatch '^[A-Fa-f0-9]{64}$' -or
         [int]$manifest.TestsPassed -ne $requiredTests.Count -or
